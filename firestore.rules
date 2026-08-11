@@ -1,0 +1,109 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function myRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && myRole() in ['admin', 'super_admin'];
+    }
+
+    function isSuperEmail() {
+      return request.auth.token.email == 'admin@coinlymax.com'; // ✅ Updated email
+    }
+
+    // ── CHAT RULES ──────────────────────────────────────────────
+    match /chats/{messageId} {
+      allow create: if signedIn();
+      allow read: if signedIn() && (
+        resource.data.uid == request.auth.uid || 
+        resource.data.type == 'support' ||
+        isAdmin()
+      );
+      allow update: if signedIn() && 
+        request.auth.uid == resource.data.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      allow delete: if false;
+    }
+
+    // ── users ────────────────────────────────────────────────────
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.balance == 0
+        && request.resource.data.status == 'active'
+        && (
+             request.resource.data.role == 'user'
+             || (request.resource.data.role == 'super_admin' && isSuperEmail())
+           );
+      allow update: if signedIn() && (
+        isAdmin()
+        || (
+             request.auth.uid == uid
+             && request.resource.data.diff(resource.data).affectedKeys()
+                  .hasOnly(['displayName', 'online', 'lastActivity', 'ipAddress', 'device', 'balance'])
+           )
+      );
+      allow delete: if isAdmin();
+    }
+
+    // ── USER TRADING DATA (subcollections under users) ──────────
+    match /users/{userId}/trades/{docId} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow write: if signedIn() && request.auth.uid == userId;
+      allow create: if signedIn() && request.auth.uid == userId;
+      allow update: if signedIn() && request.auth.uid == userId;
+      allow delete: if signedIn() && request.auth.uid == userId;
+    }
+    
+    match /users/{userId}/positions/{docId} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow write: if signedIn() && request.auth.uid == userId;
+      allow create: if signedIn() && request.auth.uid == userId;
+      allow update: if signedIn() && request.auth.uid == userId;
+      allow delete: if signedIn() && request.auth.uid == userId;
+    }
+    
+    match /users/{userId}/orders/{docId} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow write: if signedIn() && request.auth.uid == userId;
+      allow create: if signedIn() && request.auth.uid == userId;
+      allow update: if signedIn() && request.auth.uid == userId;
+      allow delete: if signedIn() && request.auth.uid == userId;
+    }
+
+    // ── PENDING TRADES ──────────────────────────────────────────
+    match /pendingTrades/{docId} {
+      allow read: if signedIn() && isAdmin();
+      allow create: if signedIn();
+      allow update: if signedIn() && isAdmin();
+      allow delete: if signedIn() && isAdmin();
+    }
+
+    // ── TRADES HISTORY ──────────────────────────────────────────
+    match /trades/{docId} {
+      allow read: if signedIn() && (request.auth.uid == resource.data.userId || isAdmin());
+      allow create: if signedIn();
+      allow update: if signedIn() && isAdmin();
+      allow delete: if signedIn() && isAdmin();
+    }
+
+    // ── activity ──────────────────────────────────────────────────
+    match /activity/{id} {
+      allow read: if signedIn() && (isAdmin() || resource.data.uid == request.auth.uid);
+      allow create: if request.resource.data.type == 'failed_login'
+        || (signedIn() && request.resource.data.uid == request.auth.uid);
+      allow update, delete: if false;
+    }
+  }
+}

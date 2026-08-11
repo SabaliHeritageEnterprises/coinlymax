@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background-color: #0a0b0d;
+  color: #eaecef;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Thin custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #23272f;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #2f343d;
+}
+
+/* Marquee animation for price ticker ribbon - updated for smooth scroll */
+@keyframes marquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-33.33%);
+  }
+}
+
+.animate-marquee {
+  animation: marquee 90s linear infinite;
+  display: inline-block;
+}
+
+.animate-marquee:hover {
+  animation-play-state: paused;
+}
+
+@layer components {
+  .glass {
+    @apply bg-bg-card/70 backdrop-blur-xl border border-border/60;
+  }
+  .card {
+    @apply bg-bg-card border border-border rounded-xl;
+  }
+  .btn-gold {
+    @apply bg-gold-gradient text-black font-semibold rounded-lg px-4 py-2
+           hover:brightness-105 active:brightness-95 transition disabled:opacity-50;
+  }
+  .btn-ghost {
+    @apply border border-border text-white rounded-lg px-4 py-2 hover:bg-bg-hover transition;
+  }
+  .input {
+    @apply w-full bg-bg-soft border border-border rounded-lg px-3 py-2 text-sm
+           outline-none focus:border-gold/60 transition placeholder:text-muted;
+  }
+}

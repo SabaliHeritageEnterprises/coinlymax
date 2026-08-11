@@ -1,0 +1,9 @@
+{
+  "users": { "placeholder": true },
+  "chats": { "placeholder": true },
+  "pendingTrades": { "placeholder": true },
+  "trades": { "placeholder": true },
+  "activity": { "placeholder": true },
+  "positions": { "placeholder": true },
+  "orders": { "placeholder": true }
+}

@@ -1,0 +1,384 @@
+// ApexTrade — PostgreSQL schema (Prisma)
+// Scalable foundation for a simulation-mode trading platform.
+// Designed so deposits/withdrawals/real execution can be layered on later
+// without breaking existing models.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────
+//  ENUMS
+// ─────────────────────────────────────────────────────────────
+
+enum Role {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  PENDING // email not yet verified
+  BANNED
+}
+
+enum MarketType {
+  CRYPTO
+  FOREX
+}
+
+enum MarketStatus {
+  ACTIVE
+  PAUSED
+  DELISTED
+}
+
+enum OrderSide {
+  BUY
+  SELL
+}
+
+enum OrderType {
+  MARKET
+  LIMIT
+  STOP_LIMIT
+}
+
+enum OrderStatus {
+  OPEN
+  FILLED
+  PARTIALLY_FILLED
+  CANCELLED
+  REJECTED
+}
+
+enum PositionStatus {
+  OPEN
+  CLOSED
+}
+
+enum NotificationType {
+  SYSTEM
+  SECURITY
+  TRADE
+  PRICE_ALERT
+  ADMIN
+}
+
+enum LoginStatus {
+  LOGIN          // successful login
+  LOGOUT         // user signed out
+  REGISTER       // new account created
+  FAILED         // bad credentials / unknown email
+  TWO_FACTOR_FAIL // password ok but wrong 2FA code
+}
+
+// ─────────────────────────────────────────────────────────────
+//  IDENTITY & ACCESS
+// ─────────────────────────────────────────────────────────────
+
+model User {
+  id                String     @id @default(uuid())
+  email             String     @unique
+  passwordHash      String
+  displayName       String?
+  role              Role       @default(USER)
+  status            UserStatus @default(PENDING)
+
+  emailVerified     Boolean    @default(false)
+  emailVerifiedAt   DateTime?
+
+  // 2FA (TOTP)
+  twoFactorEnabled  Boolean    @default(false)
+  twoFactorSecret   String? // encrypted/base32 TOTP secret
+  twoFactorRecovery String[]   @default([]) // hashed recovery codes
+
+  // Account wallet (USDT-denominated). Starts at 0 — funded by an admin.
+  paperBalance      Decimal    @default(0) @db.Decimal(24, 8)
+
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  lastLoginAt       DateTime?
+
+  sessions          Session[]
+  tokens            Token[]
+  trades            Trade[]
+  positions         Position[]
+  watchlists        Watchlist[]
+  favorites         Favorite[]
+  notifications     Notification[]
+  activityLogs      ActivityLog[]
+  loginEvents       LoginEvent[]
+  settings          UserSettings?
+  adminLogs         AdminLog[]   @relation("AdminActor")
+
+  @@index([role])
+  @@index([status])
+  @@map("users")
+}
+
+model UserSettings {
+  id                   String  @id @default(uuid())
+  userId               String  @unique
+  user                 User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  theme                String  @default("dark")
+  language             String  @default("en")
+  defaultQuoteCurrency String  @default("USDT")
+  emailNotifications   Boolean @default(true)
+  pushNotifications    Boolean @default(true)
+  tradeConfirmations   Boolean @default(true)
+
+  updatedAt            DateTime @updatedAt
+
+  @@map("settings")
+}
+
+// Auth/device sessions — one row per logged-in device.
+model Session {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  refreshHash  String // hashed refresh token (argon2)
+  userAgent    String?
+  ipAddress    String?
+  deviceLabel  String?
+  isRevoked    Boolean  @default(false)
+
+  createdAt    DateTime @default(now())
+  lastSeenAt   DateTime @default(now())
+  expiresAt    DateTime
+
+  @@index([userId])
+  @@index([userId, isRevoked])
+  @@map("sessions")
+}
+
+// Short-lived single-use tokens (email verification, password reset).
+model Token {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type      String // EMAIL_VERIFY | PASSWORD_RESET
+  tokenHash String   @unique
+  usedAt    DateTime?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId, type])
+  @@map("tokens")
+}
+
+// ─────────────────────────────────────────────────────────────
+//  MARKETS
+// ─────────────────────────────────────────────────────────────
+
+model MarketPair {
+  id            String       @id @default(uuid())
+  symbol        String       @unique // e.g. BTCUSDT, EURUSD
+  base          String // BTC, EUR
+  quote         String // USDT, USD
+  displayName   String // "BTC/USDT"
+  type          MarketType
+  status        MarketStatus @default(ACTIVE)
+
+  // Cached snapshot for fast markets-page rendering (updated by the price feed)
+  lastPrice     Decimal      @default(0) @db.Decimal(24, 8)
+  change24h     Decimal      @default(0) @db.Decimal(12, 4) // percent
+  high24h       Decimal      @default(0) @db.Decimal(24, 8)
+  low24h        Decimal      @default(0) @db.Decimal(24, 8)
+  volume24h     Decimal      @default(0) @db.Decimal(28, 8)
+  marketCap     Decimal      @default(0) @db.Decimal(28, 2)
+
+  pricePrecision Int         @default(2)
+  qtyPrecision   Int         @default(6)
+  isTrending     Boolean     @default(false)
+  sortOrder      Int         @default(0)
+
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  trades        Trade[]
+  positions     Position[]
+  favorites     Favorite[]
+  watchItems    WatchlistItem[]
+
+  @@index([type, status])
+  @@map("market_pairs")
+}
+
+// ─────────────────────────────────────────────────────────────
+//  TRADING (SIMULATION)
+// ─────────────────────────────────────────────────────────────
+
+model Trade {
+  id            String      @id @default(uuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pairId        String
+  pair          MarketPair  @relation(fields: [pairId], references: [id])
+
+  side          OrderSide
+  type          OrderType
+  status        OrderStatus @default(OPEN)
+
+  price         Decimal     @db.Decimal(24, 8) // limit/entry price
+  filledPrice   Decimal?    @db.Decimal(24, 8)
+  quantity      Decimal     @db.Decimal(24, 8)
+  filledQty     Decimal     @default(0) @db.Decimal(24, 8)
+  notional      Decimal     @db.Decimal(28, 8) // price * quantity
+
+  stopPrice     Decimal?    @db.Decimal(24, 8)
+  takeProfit    Decimal?    @db.Decimal(24, 8)
+  stopLoss      Decimal?    @db.Decimal(24, 8)
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  filledAt      DateTime?
+
+  @@index([userId, createdAt])
+  @@index([pairId, status])
+  @@map("trades")
+}
+
+// Aggregated open/closed position derived from filled trades.
+model Position {
+  id           String         @id @default(uuid())
+  userId       String
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pairId       String
+  pair         MarketPair     @relation(fields: [pairId], references: [id])
+
+  side         OrderSide
+  status       PositionStatus @default(OPEN)
+  entryPrice   Decimal        @db.Decimal(24, 8)
+  quantity     Decimal        @db.Decimal(24, 8)
+  exitPrice    Decimal?       @db.Decimal(24, 8)
+  realizedPnl  Decimal        @default(0) @db.Decimal(28, 8)
+
+  openedAt     DateTime       @default(now())
+  closedAt     DateTime?
+
+  @@index([userId, status])
+  @@map("trade_history")
+}
+
+// ─────────────────────────────────────────────────────────────
+//  WATCHLISTS & FAVORITES
+// ─────────────────────────────────────────────────────────────
+
+model Watchlist {
+  id        String          @id @default(uuid())
+  userId    String
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  isDefault Boolean         @default(false)
+  layout    Json? // saved chart layout config
+  createdAt DateTime        @default(now())
+  items     WatchlistItem[]
+
+  @@unique([userId, name])
+  @@map("watchlists")
+}
+
+model WatchlistItem {
+  id          String     @id @default(uuid())
+  watchlistId String
+  watchlist   Watchlist  @relation(fields: [watchlistId], references: [id], onDelete: Cascade)
+  pairId      String
+  pair        MarketPair @relation(fields: [pairId], references: [id], onDelete: Cascade)
+  addedAt     DateTime   @default(now())
+
+  @@unique([watchlistId, pairId])
+  @@map("watchlist_items")
+}
+
+model Favorite {
+  id        String     @id @default(uuid())
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pairId    String
+  pair      MarketPair @relation(fields: [pairId], references: [id], onDelete: Cascade)
+  createdAt DateTime   @default(now())
+
+  @@unique([userId, pairId])
+  @@map("favorites")
+}
+
+// ─────────────────────────────────────────────────────────────
+//  NOTIFICATIONS, LOGS
+// ─────────────────────────────────────────────────────────────
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType @default(SYSTEM)
+  title     String
+  body      String
+  isRead    Boolean          @default(false)
+  metadata  Json?
+  createdAt DateTime         @default(now())
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+model ActivityLog {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action    String // LOGIN, LOGOUT, PASSWORD_CHANGE, 2FA_ENABLED, TRADE_PLACED ...
+  ipAddress String?
+  userAgent String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@map("activity_logs")
+}
+
+// Dedicated, audit-grade record of every authentication event.
+// userId is nullable so failed attempts for unknown emails are still captured,
+// and events survive user deletion (onDelete: SetNull) for retention.
+model LoginEvent {
+  id        String      @id @default(uuid())
+  userId    String?
+  user      User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  email     String // attempted/affected email (always recorded)
+  username  String? // display name snapshot at event time
+  status    LoginStatus
+  ipAddress String?
+  userAgent String? // raw device/user-agent string
+  metadata  Json?
+  createdAt DateTime    @default(now())
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([status])
+  @@map("login_events")
+}
+
+model AdminLog {
+  id          String   @id @default(uuid())
+  actorId     String
+  actor       User     @relation("AdminActor", fields: [actorId], references: [id])
+  action      String // USER_SUSPENDED, PAIR_CREATED, PAIR_PAUSED ...
+  targetType  String? // USER | MARKET_PAIR | ...
+  targetId    String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  @@index([actorId, createdAt])
+  @@map("admin_logs")
+}
