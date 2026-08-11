@@ -51,7 +51,7 @@ export default function RegisterPage() {
         <div className="absolute inset-0 bg-hero-glow pointer-events-none" />
         <Link href="/" className="absolute top-8 left-16 flex items-center gap-2 font-bold text-lg">
           <span className="grid place-items-center h-8 w-8 rounded-lg bg-gold-gradient text-black"><TrendingUp size={18} /></span>
-          Crypto<span className="text-gold">Coin</span>
+          Coinly<span className="text-gold">Max</span>
         </Link>
 
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="relative">
@@ -81,7 +81,7 @@ export default function RegisterPage() {
         {/* mobile logo */}
         <Link href="/" className="lg:hidden flex items-center gap-2 font-bold text-lg mb-10">
           <span className="grid place-items-center h-8 w-8 rounded-lg bg-gold-gradient text-black"><TrendingUp size={18} /></span>
-          Crypto<span className="text-gold">Coin</span>
+          Coinly<span className="text-gold">Max</span>
         </Link>
 
         <div className="w-full max-w-sm mx-auto">
@@ -89,7 +89,7 @@ export default function RegisterPage() {
             <Done email={email} />
           ) : (
             <>
-              <h2 className="text-3xl font-bold mb-7">Join CryptoCoin today</h2>
+              <h2 className="text-3xl font-bold mb-7">Join CoinlyMax today</h2>
 
               <form onSubmit={submit} className="space-y-4">
                 <div>
@@ -129,7 +129,7 @@ export default function RegisterPage() {
                 <label className="flex items-start gap-2 text-sm text-muted cursor-pointer pt-1">
                   <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)}
                     className="mt-0.5 accent-[var(--gold)]" style={{ width: 16, height: 16 }} />
-                  <span>By creating an account, I agree to cryptocoin&apos;s{' '}
+                  <span>By creating an account, I agree to CoinlyMax&apos;s{' '}
                     <a href="#" className="text-gold underline">Terms</a> &{' '}
                     <a href="#" className="text-gold underline">Privacy Notice</a>.</span>
                 </label>

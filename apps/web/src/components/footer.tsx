@@ -17,7 +17,7 @@ export function Footer() {
             <span className="grid place-items-center h-8 w-8 rounded-lg bg-gold-gradient text-black">
               <TrendingUp size={18} />
             </span>
-            Crypto<span className="text-gold">Coin</span>
+            Coinly<span className="text-gold">Max</span>
           </Link>
           <p className="text-sm text-muted mt-4 max-w-xs">
             A next-generation crypto &amp; forex trading platform with real-time charts and a
@@ -36,7 +36,7 @@ export function Footer() {
         ))}
       </div>
       <div className="border-t border-border/60 py-6 text-center text-xs text-muted">
-        © {new Date().getFullYear()} CryptoCoin. All rights reserved.
+        © {new Date().getFullYear()} CoinlyMax. All rights reserved.
       </div>
     </footer>
   );

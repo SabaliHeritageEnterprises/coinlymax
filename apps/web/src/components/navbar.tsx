@@ -25,7 +25,7 @@ export function Navbar() {
           <span className="grid place-items-center h-8 w-8 rounded-lg bg-gold-gradient text-black">
             <TrendingUp size={18} />
           </span>
-          <span>Crypto<span className="text-gold">Coin</span></span>
+          <span>Coinly<span className="text-gold">Max</span></span>
         </Link>
 
         <nav className="hidden md:flex items-center gap-6 text-sm text-muted">
