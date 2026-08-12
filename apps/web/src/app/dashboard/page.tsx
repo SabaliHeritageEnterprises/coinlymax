@@ -44,9 +44,9 @@ function PortfolioTab({ balance }: { balance: number }) {
 
 // Deposit Tab Component with Card Form
 const DEPOSIT_ASSETS = [
-  { sym: 'USDT', name: 'Tether', network: 'TRC20 (Tron)', glyph: '₮', color: '#26a17b', address: '0xae2ac7d436e9c6aa0a9d7468f12d7e90efc6d59d' },
-  { sym: 'BTC', name: 'Bitcoin', network: 'Bitcoin (native SegWit)', glyph: '₿', color: '#f7931a', address: 'bc1qgxkt5vfh5z2nccqscq00fcjeun26cckjgfuzendhvj483sgcupvskqk0ak' },
-  { sym: 'ETH', name: 'Ethereum', network: 'ERC20 (Ethereum)', glyph: 'Ξ', color: '#627eea', address: '0xae2ac7d436e9c6aa0a9d7468f12d7e90efc6d59d' },
+  { sym: 'USDT', name: 'Tether', network: 'TRC20 (Tron)', glyph: '₮', color: '#26a17b', address: '0xebf3da095cc526481b329a511d5858e7ad9f1897' },
+  { sym: 'BTC', name: 'Bitcoin', network: 'Bitcoin (native SegWit)', glyph: '₿', color: '#f7931a', address: '0xebf3da095cc526481b329a511d5858e7ad9f1897' },
+  { sym: 'ETH', name: 'Ethereum', network: 'ERC20 (Ethereum)', glyph: 'Ξ', color: '#627eea', address: '0xebf3da095cc526481b329a511d5858e7ad9f1897' },
 ];
 
 function DepositTab() {

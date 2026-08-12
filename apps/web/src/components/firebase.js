@@ -1,4 +1,4 @@
-// Firebase initialization for ApexTrade (client SDK).
+// Firebase initialization for CoinlyMax (client SDK).
 // The web apiKey is NOT a secret — it identifies the project. Real security is
 // enforced by Firestore Security Rules (see firestore.rules) + Firebase Auth.
 import { initializeApp, getApps, getApp } from 'firebase/app';
@@ -6,14 +6,18 @@ import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
-  apiKey: 'AIzaSyClhEhgA_qtghTrMV8MIrR3hIpUf7uXtZE',
-  authDomain: 'brighterdays-68342.firebaseapp.com',
-  projectId: 'brighterdays-68342',
-  storageBucket: 'brighterdays-68342.firebasestorage.app',
-  messagingSenderId: '321066533168',
-  appId: '1:321066533168:web:49c7c9c4fcfd67fdb148f5',
-  measurementId: 'G-Y43ZXNX8VD',
+  apiKey: 'AIzaSyBb-VOXVmCmWft_HBep_ZqYoBqYXMWsN_4',
+  authDomain: 'coinlymax.firebaseapp.com',
+  projectId: 'coinlymax',
+  storageBucket: 'coinlymax.firebasestorage.app',
+  messagingSenderId: '454807147603',
+  appId: '1:454807147603:web:779d94093293ddb5ac62a6',
+  measurementId: 'G-RK573LCNKL',
 };
+
+// ✅ ADDED: Console log to verify which Firebase project is loaded
+console.log('🔥 Firebase projectId:', firebaseConfig.projectId);
+console.log('🔥 Firebase apiKey:', firebaseConfig.apiKey);
 
 // Avoid re-initializing during Next.js fast-refresh / SSR.
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
