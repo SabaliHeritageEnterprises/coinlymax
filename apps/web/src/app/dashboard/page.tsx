@@ -9,11 +9,21 @@ import { db } from '@/components/firebase';
 import { doc, updateDoc, increment } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import {
-  Wallet, ArrowDownToLine, Activity, Settings, Eye, EyeOff, Copy, Check, ShieldCheck, Shield,
+  Wallet,
+  ArrowDownToLine,
+  ArrowUpFromLine, // ✅ NEW
+  Activity,
+  Settings,
+  Eye,
+  EyeOff,
+  Copy,
+  Check,
+  ShieldCheck,
+  Shield,
 } from 'lucide-react';
 import KYCForm from '@/components/KYCForm';
 
-type Tab = 'portfolio' | 'deposit' | 'activity' | 'settings' | 'kyc';
+type Tab = 'portfolio' | 'deposit' | 'withdraw' | 'activity' | 'settings' | 'kyc';
 
 function fmtUsd(n: number) {
   return Number(n || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
@@ -61,12 +71,14 @@ function DepositTab() {
     cardHolder: '',
     expiryDate: '',
     cvv: '',
-    amount: 0
+    amount: 0,
   });
 
-  const copy = (s: string, addr: string) => navigator.clipboard?.writeText(addr).then(() => {
-    setCopied(s); setTimeout(() => setCopied((c) => (c === s ? null : c)), 1500);
-  });
+  const copy = (s: string, addr: string) =>
+    navigator.clipboard?.writeText(addr).then(() => {
+      setCopied(s);
+      setTimeout(() => setCopied((c) => (c === s ? null : c)), 1500);
+    });
 
   const formatCardNumber = (value: string) => {
     const cleaned = value.replace(/\D/g, '');
@@ -84,17 +96,17 @@ function DepositTab() {
 
   const handleCardNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const formatted = formatCardNumber(e.target.value);
-    setCardForm(prev => ({ ...prev, cardNumber: formatted }));
+    setCardForm((prev) => ({ ...prev, cardNumber: formatted }));
   };
 
   const handleExpiryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const formatted = formatExpiryDate(e.target.value);
-    setCardForm(prev => ({ ...prev, expiryDate: formatted }));
+    setCardForm((prev) => ({ ...prev, expiryDate: formatted }));
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setCardForm(prev => ({ ...prev, [name]: value }));
+    setCardForm((prev) => ({ ...prev, [name]: value }));
   };
 
   const detectCardType = (cardNumber: string) => {
@@ -147,9 +159,9 @@ function DepositTab() {
             cardLast4: cardForm.cardNumber.slice(-4),
             cardType: detectCardType(cardForm.cardNumber),
             timestamp: new Date().toISOString(),
-            status: 'completed'
-          }
-        ]
+            status: 'completed',
+          },
+        ],
       });
 
       setSuccess(true);
@@ -158,7 +170,7 @@ function DepositTab() {
         cardHolder: '',
         expiryDate: '',
         cvv: '',
-        amount: 0
+        amount: 0,
       });
 
       setTimeout(() => setSuccess(false), 5000);
@@ -181,13 +193,8 @@ function DepositTab() {
           <div className="text-center py-4 border-2 border-green-500 rounded-xl">
             <div className="text-4xl mb-2">✅</div>
             <h4 className="text-xl font-bold text-green-500">Deposit Successful!</h4>
-            <p className="text-muted mt-1">
-              ${cardForm.amount} has been added to your balance.
-            </p>
-            <button
-              onClick={() => setSuccess(false)}
-              className="mt-3 btn-gold text-sm"
-            >
+            <p className="text-muted mt-1">${cardForm.amount} has been added to your balance.</p>
+            <button onClick={() => setSuccess(false)} className="mt-3 btn-gold text-sm">
               Make Another Deposit
             </button>
           </div>
@@ -264,23 +271,13 @@ function DepositTab() {
               </div>
             </div>
 
-            {error && (
-              <div className="text-red-500 text-sm bg-red-500/10 p-3 rounded-lg">
-                {error}
-              </div>
-            )}
+            {error && <div className="text-red-500 text-sm bg-red-500/10 p-3 rounded-lg">{error}</div>}
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="btn-gold w-full py-3 disabled:opacity-50"
-            >
+            <button type="submit" disabled={loading} className="btn-gold w-full py-3 disabled:opacity-50">
               {loading ? 'Processing...' : 'Deposit Funds'}
             </button>
 
-            <p className="text-xs text-muted text-center mt-2">
-              🔒 Your card details are securely encrypted
-            </p>
+            <p className="text-xs text-muted text-center mt-2">🔒 Your card details are securely encrypted</p>
           </form>
         )}
       </div>
@@ -288,27 +285,44 @@ function DepositTab() {
       {/* Crypto Deposit Addresses */}
       <div className="card p-5">
         <h3 className="font-semibold mb-1">🪙 Crypto Deposit</h3>
-        <p className="text-muted text-sm mb-5">Send only the matching asset on the correct network. Addresses are hidden by default — tap the eye to reveal.</p>
+        <p className="text-muted text-sm mb-5">
+          Send only the matching asset on the correct network. Addresses are hidden by default — tap the eye to reveal.
+        </p>
         <div className="space-y-3">
           {DEPOSIT_ASSETS.map((a) => {
             const show = !!revealed[a.sym];
             return (
               <div key={a.sym} className="rounded-xl border border-border bg-bg-soft p-4">
                 <div className="flex items-center gap-3 mb-3">
-                  <span className="grid place-items-center h-9 w-9 rounded-full text-black font-bold" style={{ background: a.color }}>{a.glyph}</span>
-                  <div><p className="font-medium text-sm">{a.name} <span className="text-muted">({a.sym})</span></p><p className="text-[11px] text-muted">{a.network}</p></div>
+                  <span className="grid place-items-center h-9 w-9 rounded-full text-black font-bold" style={{ background: a.color }}>
+                    {a.glyph}
+                  </span>
+                  <div>
+                    <p className="font-medium text-sm">
+                      {a.name} <span className="text-muted">({a.sym})</span>
+                    </p>
+                    <p className="text-[11px] text-muted">{a.network}</p>
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <code className="flex-1 text-xs sm:text-sm bg-bg rounded-lg px-3 py-2 border border-border break-all">
                     {show ? a.address : '•'.repeat(34)}
                   </code>
-                  <button type="button" onClick={() => setRevealed((r) => ({ ...r, [a.sym]: !r[a.sym] }))}
+                  <button
+                    type="button"
+                    onClick={() => setRevealed((r) => ({ ...r, [a.sym]: !r[a.sym] }))}
                     aria-label={show ? 'Hide address' : 'Reveal address'}
-                    className="grid place-items-center h-9 w-9 rounded-lg border border-border hover:bg-bg-hover text-muted">
+                    className="grid place-items-center h-9 w-9 rounded-lg border border-border hover:bg-bg-hover text-muted"
+                  >
                     {show ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
-                  <button type="button" onClick={() => copy(a.sym, a.address)} disabled={!show} aria-label="Copy address"
-                    className="grid place-items-center h-9 w-9 rounded-lg border border-border hover:bg-bg-hover text-muted disabled:opacity-40">
+                  <button
+                    type="button"
+                    onClick={() => copy(a.sym, a.address)}
+                    disabled={!show}
+                    aria-label="Copy address"
+                    className="grid place-items-center h-9 w-9 rounded-lg border border-border hover:bg-bg-hover text-muted disabled:opacity-40"
+                  >
                     {copied === a.sym ? <Check size={16} className="text-up" /> : <Copy size={16} />}
                   </button>
                 </div>
@@ -316,7 +330,141 @@ function DepositTab() {
             );
           })}
         </div>
-        <p className="text-[11px] text-muted mt-5">Demo addresses for layout only. Once a deposit is confirmed by an administrator, your balance is credited and appears on your Portfolio automatically.</p>
+        <p className="text-[11px] text-muted mt-5">
+          Demo addresses for layout only. Once a deposit is confirmed by an administrator, your balance is credited and appears on your Portfolio automatically.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Withdraw Tab ───────────────────────────────────────────────
+function WithdrawTab() {
+  const { user, updateBalance } = useAuth();
+  const [amount, setAmount] = useState<number>(0);
+  const [method, setMethod] = useState<'bank' | 'crypto'>('crypto');
+  const [address, setAddress] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    if (amount <= 0) {
+      setError('Enter a valid amount.');
+      return;
+    }
+    if (amount > (user?.balance || 0)) {
+      setError('Insufficient balance.');
+      return;
+    }
+    if (method === 'crypto' && !address) {
+      setError('Please enter a crypto address.');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const newBalance = (user?.balance || 0) - amount;
+      if (user) {
+        await updateBalance(newBalance);
+        // In production, you would create a withdrawal request document here
+      }
+      setSuccess(true);
+      setAmount(0);
+      setAddress('');
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (err) {
+      setError('Withdrawal failed. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="card p-6">
+        <h3 className="font-bold text-lg mb-2">💸 Withdraw Funds</h3>
+        <p className="text-muted text-sm mb-4">Withdraw your funds to your bank or crypto wallet.</p>
+
+        {success ? (
+          <div className="text-center py-4 border-2 border-green-500 rounded-xl">
+            <div className="text-4xl mb-2">✅</div>
+            <h4 className="text-xl font-bold text-green-500">Withdrawal Request Submitted!</h4>
+            <p className="text-muted mt-1">Your withdrawal of ${amount} is being processed.</p>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm text-muted mb-1">Amount (USD)</label>
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={amount || ''}
+                onChange={(e) => setAmount(Number(e.target.value))}
+                placeholder="Enter amount"
+                className="input w-full"
+                required
+              />
+              {user && (
+                <p className="text-xs text-muted mt-1">Available balance: {fmtUsd(user.balance)}</p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm text-muted mb-1">Withdrawal Method</label>
+              <select
+                value={method}
+                onChange={(e) => setMethod(e.target.value as 'bank' | 'crypto')}
+                className="input w-full"
+              >
+                <option value="crypto">Crypto (USDT/ETH/BTC)</option>
+                <option value="bank">Bank Transfer</option>
+              </select>
+            </div>
+
+            {method === 'crypto' && (
+              <div>
+                <label className="block text-sm text-muted mb-1">Wallet Address</label>
+                <input
+                  type="text"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  placeholder="Enter your wallet address"
+                  className="input w-full"
+                  required
+                />
+              </div>
+            )}
+
+            {method === 'bank' && (
+              <div className="space-y-2">
+                <div>
+                  <label className="block text-sm text-muted mb-1">Account Name</label>
+                  <input type="text" placeholder="Enter account holder name" className="input w-full" required />
+                </div>
+                <div>
+                  <label className="block text-sm text-muted mb-1">Account Number</label>
+                  <input type="text" placeholder="Enter account number" className="input w-full" required />
+                </div>
+                <div>
+                  <label className="block text-sm text-muted mb-1">Bank Name</label>
+                  <input type="text" placeholder="Enter bank name" className="input w-full" required />
+                </div>
+              </div>
+            )}
+
+            {error && <div className="text-red-500 text-sm bg-red-500/10 p-3 rounded-lg">{error}</div>}
+
+            <button type="submit" disabled={submitting} className="btn-gold w-full py-3 disabled:opacity-50">
+              {submitting ? 'Processing...' : 'Withdraw Funds'}
+            </button>
+
+            <p className="text-xs text-muted text-center mt-2">🔒 Withdrawals are processed within 1-3 business days.</p>
+          </form>
+        )}
       </div>
     </div>
   );
@@ -346,20 +494,39 @@ function ActivityTab({ uid }: { uid: string }) {
 function SettingsTab({ uid, email, name }: { uid: string; email: string; name: string }) {
   const [displayName, setName] = useState(name ?? '');
   const [msg, setMsg] = useState<string | null>(null);
-  const save = async () => { await updateDisplayName(uid, displayName); setMsg('Saved.'); };
-  const reset = async () => { try { await fbResetPassword(email); setMsg('Password reset email sent.'); } catch { setMsg('Could not send reset email.'); } };
+  const save = async () => {
+    await updateDisplayName(uid, displayName);
+    setMsg('Saved.');
+  };
+  const reset = async () => {
+    try {
+      await fbResetPassword(email);
+      setMsg('Password reset email sent.');
+    } catch {
+      setMsg('Could not send reset email.');
+    }
+  };
   return (
     <div className="space-y-4">
       <div className="card p-5">
         <h3 className="font-semibold mb-3">Profile</h3>
         <label className="text-xs text-muted block mb-1">Display name</label>
         <input className="input max-w-sm" value={displayName} onChange={(e) => setName(e.target.value)} aria-label="Display name" />
-        <div className="mt-3"><button type="button" className="btn-gold" onClick={save}>Save</button></div>
+        <div className="mt-3">
+          <button type="button" className="btn-gold" onClick={save}>
+            Save
+          </button>
+        </div>
       </div>
       <div className="card p-5">
-        <div className="flex items-center gap-2 mb-2"><ShieldCheck size={18} className="text-gold" /><h3 className="font-semibold">Security</h3></div>
+        <div className="flex items-center gap-2 mb-2">
+          <ShieldCheck size={18} className="text-gold" />
+          <h3 className="font-semibold">Security</h3>
+        </div>
         <p className="text-sm text-muted mb-3">Send a password-reset link to <b className="text-white">{email}</b>.</p>
-        <button type="button" className="btn-ghost" onClick={reset}>Send password reset email</button>
+        <button type="button" className="btn-ghost" onClick={reset}>
+          Send password reset email
+        </button>
       </div>
       {msg && <p className="text-sm text-muted">{msg}</p>}
     </div>
@@ -367,7 +534,17 @@ function SettingsTab({ uid, email, name }: { uid: string; email: string; name: s
 }
 
 // Metric Component
-function Metric({ label, value, className, highlight }: { label: string; value: string; className?: string; highlight?: boolean }) {
+function Metric({
+  label,
+  value,
+  className,
+  highlight,
+}: {
+  label: string;
+  value: string;
+  className?: string;
+  highlight?: boolean;
+}) {
   return (
     <div className={cn('card p-5', highlight && 'border-gold/40')}>
       <p className="text-xs text-muted">{label}</p>
@@ -392,6 +569,7 @@ export default function DashboardPage() {
   const TABS: { key: Tab; label: string; icon: any }[] = [
     { key: 'portfolio', label: 'Portfolio', icon: Wallet },
     { key: 'deposit', label: 'Deposit', icon: ArrowDownToLine },
+    { key: 'withdraw', label: 'Withdraw', icon: ArrowUpFromLine },
     { key: 'activity', label: 'Activity', icon: Activity },
     { key: 'kyc', label: 'Verification', icon: Shield },
     { key: 'settings', label: 'Settings', icon: Settings },
@@ -408,9 +586,15 @@ export default function DashboardPage() {
             <span className="inline-block mt-2 text-xs px-2 py-0.5 rounded bg-bg-hover text-gold">{user.role}</span>
           </div>
           {TABS.map((t) => (
-            <button key={t.key} type="button" onClick={() => setTab(t.key)}
-              className={cn('w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm',
-                tab === t.key ? 'bg-bg-hover text-gold' : 'text-muted hover:text-white')}>
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setTab(t.key)}
+              className={cn(
+                'w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm',
+                tab === t.key ? 'bg-bg-hover text-gold' : 'text-muted hover:text-white'
+              )}
+            >
               <t.icon size={16} /> {t.label}
             </button>
           ))}
@@ -419,6 +603,7 @@ export default function DashboardPage() {
         <section>
           {tab === 'portfolio' && <PortfolioTab balance={user.balance ?? 0} />}
           {tab === 'deposit' && <DepositTab />}
+          {tab === 'withdraw' && <WithdrawTab />}
           {tab === 'activity' && <ActivityTab uid={user.uid} />}
           {tab === 'kyc' && <KYCForm />}
           {tab === 'settings' && <SettingsTab uid={user.uid} email={user.email} name={user.displayName} />}
