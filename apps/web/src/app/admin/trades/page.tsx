@@ -65,11 +65,17 @@ export default function AdminTrades() {
     );
 
     const unsub = onSnapshot(q, (snapshot) => {
-      console.log('📨 AdminTrades: Pending trades snapshot received. Size:', snapshot.size);
+      console.log('📨 AdminTrades: Snapshot size:', snapshot.size);
       const trades: PendingTrade[] = [];
       snapshot.forEach((doc) => {
         const data = doc.data();
-        trades.push({ id: doc.id, ...data } as PendingTrade);
+        console.log(`📄 Document ${doc.id} status: ${data.status}`);
+        // ✅ Safety filter – only include if status is exactly 'PENDING'
+        if (data.status === 'PENDING') {
+          trades.push({ id: doc.id, ...data } as PendingTrade);
+        } else {
+          console.log(`⏩ Skipping doc ${doc.id} because status is ${data.status}`);
+        }
       });
       setPendingTrades(trades);
       setLoading(false);
@@ -93,6 +99,8 @@ export default function AdminTrades() {
         return;
       }
 
+      console.log('✅ Approving trade:', trade.id);
+
       // 1. Update user's balance
       const userRef = doc(db, 'users', trade.userId);
       const userDoc = await getDoc(userRef);
@@ -104,6 +112,7 @@ export default function AdminTrades() {
       const currentBalance = userDoc.data()?.balance || 0;
       const newBalance = currentBalance + trade.pnl;
       await updateDoc(userRef, { balance: newBalance });
+      console.log('✅ Balance updated');
 
       // 2. Add to trades history
       const tradesRef = collection(db, 'trades');
@@ -115,8 +124,9 @@ export default function AdminTrades() {
         approvedAt: new Date().toISOString(),
         approvedEmail: user.email
       });
+      console.log('✅ Trade added to history');
 
-      // 3. Update pending trade status (skip if already gone)
+      // 3. Update pending trade status to APPROVED
       const pendingRef = doc(db, 'pendingTrades', trade.id);
       try {
         await updateDoc(pendingRef, {
@@ -126,8 +136,13 @@ export default function AdminTrades() {
           approvedAt: new Date().toISOString(),
           approvedEmail: user.email
         });
+        console.log('✅ Pending status updated to APPROVED');
       } catch (updateError: any) {
-        if (updateError.code !== 'not-found') throw updateError;
+        if (updateError.code === 'not-found') {
+          console.log('ℹ️ Pending document already gone');
+        } else {
+          throw updateError;
+        }
       }
 
       // 4. Update position if BUY
@@ -148,12 +163,13 @@ export default function AdminTrades() {
               approvedAt: new Date().toISOString()
             });
           });
+          console.log('✅ Position updated');
         } catch (posError) {
           console.log('⚠️ No position found to update:', posError);
         }
       }
 
-      // ✅ Remove from local state
+      // ✅ Remove from local state (listener will also skip it now)
       setPendingTrades(prev => prev.filter(t => t.id !== trade.id));
       alert('✅ Trade approved successfully!');
     } catch (error) {
@@ -171,6 +187,8 @@ export default function AdminTrades() {
     }
 
     try {
+      console.log('❌ Rejecting trade:', trade.id);
+
       // 1. Add to trades history
       const tradesRef = collection(db, 'trades');
       await addDoc(tradesRef, {
@@ -179,8 +197,9 @@ export default function AdminTrades() {
         rejectedBy: user.uid,
         rejectedAt: new Date().toISOString()
       });
+      console.log('✅ Trade added to history as REJECTED');
 
-      // 2. Update pending trade status
+      // 2. Update pending trade status to REJECTED
       const pendingRef = doc(db, 'pendingTrades', trade.id);
       try {
         await updateDoc(pendingRef, {
@@ -188,8 +207,13 @@ export default function AdminTrades() {
           rejectedBy: user.uid,
           rejectedAt: new Date().toISOString()
         });
+        console.log('✅ Pending status updated to REJECTED');
       } catch (updateError: any) {
-        if (updateError.code !== 'not-found') throw updateError;
+        if (updateError.code === 'not-found') {
+          console.log('ℹ️ Pending document already gone');
+        } else {
+          throw updateError;
+        }
       }
 
       // ✅ Remove from local state
@@ -230,7 +254,6 @@ export default function AdminTrades() {
             {pendingTrades.map((trade) => (
               <div key={trade.id} className="card p-4 border border-[#23272f] hover:border-gold/30 transition-colors">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
-                  {/* Left: trade details */}
                   <div className="flex-1 space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className={`font-bold text-sm ${trade.side === 'BUY' ? 'text-up' : 'text-down'}`}>
@@ -268,7 +291,6 @@ export default function AdminTrades() {
                       </div>
                     </div>
                   </div>
-                  {/* Right: buttons */}
                   <div className="flex gap-2 shrink-0">
                     <button
                       onClick={() => handleApprove(trade)}
