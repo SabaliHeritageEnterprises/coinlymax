@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/store/auth';
 import { db } from '@/components/firebase';
@@ -44,6 +44,7 @@ export default function AdminTrades() {
   const [pendingTrades, setPendingTrades] = useState<PendingTrade[]>([]);
   const [loading, setLoading] = useState(true);
   const [approving, setApproving] = useState<string | null>(null);
+  const processedIds = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (initialized && (!user || !isAdmin(user.role))) {
@@ -71,9 +72,11 @@ export default function AdminTrades() {
       const trades: PendingTrade[] = [];
       snapshot.forEach((doc) => {
         const data = doc.data();
-        // Only include status 'PENDING' (should be all, but safe)
-        if (data.status === 'PENDING') {
+        // Skip if already processed or status not PENDING
+        if (data.status === 'PENDING' && !processedIds.current.has(doc.id)) {
           trades.push({ id: doc.id, ...data } as PendingTrade);
+        } else {
+          console.log(`⏩ Skipping doc ${doc.id} (status=${data.status}, processed=${processedIds.current.has(doc.id)})`);
         }
       });
       setPendingTrades(trades);
@@ -113,7 +116,7 @@ export default function AdminTrades() {
       await updateDoc(userRef, { balance: newBalance });
       console.log('✅ Balance updated');
 
-      // 2. Add to trades history (permanent record)
+      // 2. Add to trades history
       const tradesRef = collection(db, 'trades');
       await addDoc(tradesRef, {
         ...trade,
@@ -125,7 +128,7 @@ export default function AdminTrades() {
       });
       console.log('✅ Trade added to history');
 
-      // 3. Add activity log (optional)
+      // 3. Add activity log
       await addDoc(collection(db, 'activity'), {
         type: 'trade_approved',
         uid: user.uid,
@@ -168,7 +171,8 @@ export default function AdminTrades() {
         }
       }
 
-      // ✅ Remove from local state (already done by listener, but double‑safe)
+      // ✅ Mark as processed and remove from local state
+      processedIds.current.add(trade.id);
       setPendingTrades(prev => prev.filter(t => t.id !== trade.id));
       alert('✅ Trade approved successfully!');
     } catch (error) {
@@ -216,7 +220,8 @@ export default function AdminTrades() {
       await deleteDoc(pendingRef);
       console.log('✅ Pending trade deleted');
 
-      // ✅ Remove from local state
+      // ✅ Mark as processed and remove from local state
+      processedIds.current.add(trade.id);
       setPendingTrades(prev => prev.filter(t => t.id !== trade.id));
       alert('✅ Trade rejected successfully!');
     } catch (error) {
