@@ -15,7 +15,6 @@ import {
 import { auth, db } from '@/components/firebase';
 
 /** The single super-admin, designated by email (bootstrapped in code + rules). */
-// ✅ UPDATE THIS EMAIL for your new platform
 export const SUPER_ADMIN_EMAIL = 'admin@coinlymax.com';
 
 export type Role = 'user' | 'admin' | 'super_admin';
@@ -34,6 +33,7 @@ export interface AppUser {
   lastActivity?: Timestamp;
   ipAddress?: string;
   device?: string;
+  customProfitPercentage?: number; // ✅ NEW: per‑user override
 }
 
 export type ActivityType = 'register' | 'login' | 'logout' | 'failed_login';
@@ -63,7 +63,7 @@ async function clientIp(): Promise<string | undefined> {
   return cachedIp;
 }
 
-// ── activity log (Firestore `activity` collection) ──────────────
+// ── activity log ──────────────────────────────────────────────
 export async function recordActivity(
   type: ActivityType,
   data: { uid?: string | null; email: string; username?: string | null; status?: 'success' | 'failed' },
@@ -84,7 +84,7 @@ export async function recordActivity(
   }
 }
 
-// ── user profile docs (Firestore `users` collection) ────────────
+// ── user profile docs ──────────────────────────────────────────
 export async function ensureUserDoc(fb: FbUser, displayName?: string): Promise<void> {
   const ref = doc(db, 'users', fb.uid);
   const snap = await getDoc(ref);
@@ -103,6 +103,7 @@ export async function ensureUserDoc(fb: FbUser, displayName?: string): Promise<v
       lastActivity: serverTimestamp(),
       ipAddress: (await clientIp()) ?? null,
       device: deviceInfo(),
+      // customProfitPercentage is intentionally omitted – defaults to undefined
     });
   }
 }
@@ -112,7 +113,7 @@ export async function getUserDoc(uid: string): Promise<AppUser | null> {
   return snap.exists() ? (snap.data() as AppUser) : null;
 }
 
-// ── auth flows ───────────────────────────────────────────────────
+// ── auth flows ──────────────────────────────────────────────────
 export async function fbRegister(email: string, password: string, displayName?: string) {
   const cred = await createUserWithEmailAndPassword(auth, email, password);
   if (displayName) await updateProfile(cred.user, { displayName });
@@ -146,7 +147,7 @@ export async function fbResetPassword(email: string) {
   await sendPasswordResetEmail(auth, email);
 }
 
-// ── presence ─────────────────────────────────────────────────────
+// ── presence ────────────────────────────────────────────────────
 export async function markOnline(uid: string, online: boolean) {
   try {
     await updateDoc(doc(db, 'users', uid), { online, lastActivity: serverTimestamp() });
@@ -170,7 +171,7 @@ export function computeOnline(u: { online?: boolean; lastActivity?: Timestamp })
   return Date.now() - ms < 60_000;
 }
 
-// ── admin actions ────────────────────────────────────────────────
+// ── admin actions ──────────────────────────────────────────────
 export async function adminUpdateUser(uid: string, data: Partial<AppUser>) {
   await updateDoc(doc(db, 'users', uid), data as Record<string, unknown>);
 }
@@ -178,7 +179,7 @@ export async function adminAdjustBalance(uid: string, delta: number) {
   await updateDoc(doc(db, 'users', uid), { balance: increment(delta) });
 }
 
-// ── realtime listeners ───────────────────────────────────────────
+// ── realtime listeners ──────────────────────────────────────────
 export function listenUsers(cb: (users: AppUser[]) => void) {
   const q = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
   return onSnapshot(q, (snap) => cb(snap.docs.map((d) => d.data() as AppUser)), () => cb([]));
@@ -211,12 +212,7 @@ export function listenUserActivity(uid: string, cb: (events: any[]) => void) {
   );
 }
 
-// ── demo trading: update user balance ────────────────────────────
-/**
- * Update user's balance directly (for demo trading)
- * Each user has their own independent balance that increases with trades
- * Used by OrderPanel for Buy/Sell demo functionality
- */
+// ── demo trading: update user balance ──────────────────────────
 export async function updateUserBalance(uid: string, newBalance: number) {
   try {
     const userRef = doc(db, 'users', uid);
@@ -228,8 +224,7 @@ export async function updateUserBalance(uid: string, newBalance: number) {
   }
 }
 
-// ── user trades storage (Firestore subcollections) ──────────────
-
+// ── user trades storage ────────────────────────────────────────
 export interface UserTrade {
   id: string;
   symbol: string;
@@ -363,8 +358,6 @@ export async function updateOrderStatus(uid: string, orderId: string, status: 'P
 }
 
 // ── real-time listeners for user trading data ──────────────────
-
-// Listen to user's trades in real-time
 export function listenUserTrades(uid: string, cb: (trades: UserTrade[]) => void) {
   const tradesRef = collection(db, 'users', uid, 'trades');
   return onSnapshot(tradesRef, (snapshot) => {
@@ -373,7 +366,6 @@ export function listenUserTrades(uid: string, cb: (trades: UserTrade[]) => void)
   });
 }
 
-// Listen to user's positions in real-time
 export function listenUserPositions(uid: string, cb: (positions: UserPosition[]) => void) {
   const positionsRef = collection(db, 'users', uid, 'positions');
   return onSnapshot(positionsRef, (snapshot) => {
@@ -382,7 +374,6 @@ export function listenUserPositions(uid: string, cb: (positions: UserPosition[])
   });
 }
 
-// Listen to user's orders in real-time
 export function listenUserOrders(uid: string, cb: (orders: UserOrder[]) => void) {
   const ordersRef = collection(db, 'users', uid, 'orders');
   return onSnapshot(ordersRef, (snapshot) => {
@@ -391,7 +382,6 @@ export function listenUserOrders(uid: string, cb: (orders: UserOrder[]) => void)
   });
 }
 
-// Listen to user's balance in real-time
 export function listenUserBalance(uid: string, cb: (balance: number) => void) {
   const userRef = doc(db, 'users', uid);
   return onSnapshot(userRef, (snapshot) => {
