@@ -14,7 +14,9 @@ import {
   getDoc,
   getDocs,
   orderBy,
-  addDoc
+  addDoc,
+  deleteDoc,
+  serverTimestamp,
 } from 'firebase/firestore';
 import { isAdmin } from '@/lib/fb';
 
@@ -69,12 +71,9 @@ export default function AdminTrades() {
       const trades: PendingTrade[] = [];
       snapshot.forEach((doc) => {
         const data = doc.data();
-        console.log(`📄 Document ${doc.id} status: ${data.status}`);
-        // ✅ Safety filter – only include if status is exactly 'PENDING'
+        // Only include status 'PENDING' (should be all, but safe)
         if (data.status === 'PENDING') {
           trades.push({ id: doc.id, ...data } as PendingTrade);
-        } else {
-          console.log(`⏩ Skipping doc ${doc.id} because status is ${data.status}`);
         }
       });
       setPendingTrades(trades);
@@ -114,7 +113,7 @@ export default function AdminTrades() {
       await updateDoc(userRef, { balance: newBalance });
       console.log('✅ Balance updated');
 
-      // 2. Add to trades history
+      // 2. Add to trades history (permanent record)
       const tradesRef = collection(db, 'trades');
       await addDoc(tradesRef, {
         ...trade,
@@ -126,26 +125,26 @@ export default function AdminTrades() {
       });
       console.log('✅ Trade added to history');
 
-      // 3. Update pending trade status to APPROVED
-      const pendingRef = doc(db, 'pendingTrades', trade.id);
-      try {
-        await updateDoc(pendingRef, {
-          status: 'APPROVED',
-          approved: true,
-          approvedBy: user.uid,
-          approvedAt: new Date().toISOString(),
-          approvedEmail: user.email
-        });
-        console.log('✅ Pending status updated to APPROVED');
-      } catch (updateError: any) {
-        if (updateError.code === 'not-found') {
-          console.log('ℹ️ Pending document already gone');
-        } else {
-          throw updateError;
-        }
-      }
+      // 3. Add activity log (optional)
+      await addDoc(collection(db, 'activity'), {
+        type: 'trade_approved',
+        uid: user.uid,
+        email: user.email,
+        username: user.displayName || user.email,
+        tradeId: trade.id,
+        symbol: trade.symbol,
+        amount: trade.total,
+        pnl: trade.pnl,
+        timestamp: serverTimestamp(),
+        status: 'success'
+      }).catch(() => {});
 
-      // 4. Update position if BUY
+      // 4. Delete pending document
+      const pendingRef = doc(db, 'pendingTrades', trade.id);
+      await deleteDoc(pendingRef);
+      console.log('✅ Pending trade deleted');
+
+      // 5. Update position if BUY
       if (trade.side === 'BUY') {
         try {
           const positionsRef = collection(db, 'users', trade.userId, 'positions');
@@ -169,7 +168,7 @@ export default function AdminTrades() {
         }
       }
 
-      // ✅ Remove from local state (listener will also skip it now)
+      // ✅ Remove from local state (already done by listener, but double‑safe)
       setPendingTrades(prev => prev.filter(t => t.id !== trade.id));
       alert('✅ Trade approved successfully!');
     } catch (error) {
@@ -199,22 +198,23 @@ export default function AdminTrades() {
       });
       console.log('✅ Trade added to history as REJECTED');
 
-      // 2. Update pending trade status to REJECTED
+      // 2. Add activity log
+      await addDoc(collection(db, 'activity'), {
+        type: 'trade_rejected',
+        uid: user.uid,
+        email: user.email,
+        username: user.displayName || user.email,
+        tradeId: trade.id,
+        symbol: trade.symbol,
+        amount: trade.total,
+        timestamp: serverTimestamp(),
+        status: 'success'
+      }).catch(() => {});
+
+      // 3. Delete pending document
       const pendingRef = doc(db, 'pendingTrades', trade.id);
-      try {
-        await updateDoc(pendingRef, {
-          status: 'REJECTED',
-          rejectedBy: user.uid,
-          rejectedAt: new Date().toISOString()
-        });
-        console.log('✅ Pending status updated to REJECTED');
-      } catch (updateError: any) {
-        if (updateError.code === 'not-found') {
-          console.log('ℹ️ Pending document already gone');
-        } else {
-          throw updateError;
-        }
-      }
+      await deleteDoc(pendingRef);
+      console.log('✅ Pending trade deleted');
 
       // ✅ Remove from local state
       setPendingTrades(prev => prev.filter(t => t.id !== trade.id));
