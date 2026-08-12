@@ -6,7 +6,7 @@ import { useAuth } from '@/store/auth';
 import { useMarket } from '@/store/market';
 import { fmtPrice, cn } from '@/lib/utils';
 import { saveUserTrade, saveUserPosition, saveUserOrder, updateUserBalance } from '@/lib/fb';
-import { auth, db } from '@/components/firebase'; // ✅ ADDED db
+import { auth, db } from '@/components/firebase';
 import { collection, addDoc } from 'firebase/firestore';
 import type { MarketPair, OrderSide, OrderType } from '@/lib/types';
 
@@ -19,7 +19,6 @@ export function OrderPanel({ pair, onPlaced }: Props) {
   const { user, updateBalance, addPosition, addOrder, addTradeHistory, loadUserData } = useAuth();
   const live = useMarket((s) => s.tickers[pair.symbol]);
   
-  // ─── GET PRICE (already validated in ws.ts) ─────────────────────
   const lastPrice = live?.price ?? Number(pair.lastPrice);
 
   const [side, setSide] = useState<OrderSide>('BUY');
@@ -49,7 +48,6 @@ export function OrderPanel({ pair, onPlaced }: Props) {
       const qty = parseFloat(quantity);
       const price = effectivePrice;
       
-      // ─── 1. CALCULATE USDT COST ──────────────────────────────────
       const usdtCost = qty * price;
       
       console.log('📊 Trade calculation:');
@@ -59,17 +57,14 @@ export function OrderPanel({ pair, onPlaced }: Props) {
       console.log(`   USDT Cost: $${usdtCost.toFixed(2)}`);
       console.log(`   Balance: $${user.balance.toFixed(2)}`);
       
-      // ─── 2. CHECK BALANCE ──────────────────────────────────────
       if (usdtCost > user.balance) {
         setMsg(`❌ Insufficient USDT! Need: $${usdtCost.toFixed(2)}, Have: $${user.balance.toFixed(2)}`);
         setBusy(false);
         return;
       }
       
-      // ─── 3. DEDUCT USDT ──────────────────────────────────────────
       const newBalance = user.balance - usdtCost;
       
-      // ─── 4. UPDATE BALANCE ──────────────────────────────────────
       await updateUserBalance(user.uid, newBalance);
       await updateBalance(newBalance);
       console.log('✅ Balance updated:', newBalance);
@@ -80,7 +75,6 @@ export function OrderPanel({ pair, onPlaced }: Props) {
       const tradeId = `trade_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const orderId = `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       
-      // ─── 5. SAVE TRADE TO PENDING TRADES COLLECTION ──────────────
       const tradeData = {
         id: tradeId,
         symbol: pair.symbol,
@@ -101,16 +95,13 @@ export function OrderPanel({ pair, onPlaced }: Props) {
         userDisplayName: user.displayName || user.email?.split('@')[0] || 'Trader',
       };
       
-      // ✅ Save to pendingTrades collection (root level)
       const pendingRef = collection(db, 'pendingTrades');
       const pendingDocRef = await addDoc(pendingRef, tradeData);
       console.log('✅ Trade saved to pendingTrades collection:', pendingDocRef.id);
       
-      // ─── 6. SAVE TO LOCAL STATE ─────────────────────────────────
       await addTradeHistory(tradeData);
       console.log('✅ Trade saved to local state as PENDING');
       
-      // ─── 7. SAVE ORDER ──────────────────────────────────────────
       const orderData = {
         id: orderId,
         symbol: pair.symbol,
@@ -125,7 +116,6 @@ export function OrderPanel({ pair, onPlaced }: Props) {
       await saveUserOrder(user.uid, orderData);
       await addOrder(orderData);
       
-      // ─── 8. SAVE POSITION (if BUY) ─────────────────────────────
       if (side === 'BUY') {
         const posId = `pos_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         const positionData = {
@@ -145,16 +135,14 @@ export function OrderPanel({ pair, onPlaced }: Props) {
         await addPosition(positionData);
       }
       
-      // ─── 9. RELOAD USER DATA ──────────────────────────────────
       await loadUserData(user.uid);
       
-     setMsg(`✅ ${side} order submitted for ${qty} ${pair.base} | Pending.`);
+      setMsg(`✅ ${side} order submitted for ${qty} ${pair.base} | Pending.`);
       
       if (onPlaced) {
         onPlaced();
       }
       
-      // ─── 10. BACKEND CALL ──────────────────────────────────────
       try {
         await api.post('/trades/orders', {
           symbol: pair.symbol,
@@ -181,7 +169,6 @@ export function OrderPanel({ pair, onPlaced }: Props) {
 
   return (
     <div className="card p-4">
-      {/* Buy / Sell toggle */}
       <div className="grid grid-cols-2 gap-1 p-1 bg-bg-soft rounded-lg mb-4">
         {(['BUY', 'SELL'] as OrderSide[]).map((s) => (
           <button
@@ -199,7 +186,6 @@ export function OrderPanel({ pair, onPlaced }: Props) {
         ))}
       </div>
 
-      {/* Order type */}
       <div className="flex gap-2 mb-4 text-xs">
         {(['MARKET', 'LIMIT', 'STOP_LIMIT'] as OrderType[]).map((t) => (
           <button
@@ -221,7 +207,7 @@ export function OrderPanel({ pair, onPlaced }: Props) {
           </div>
         )}
         <div className="block">
-          <span className="text-xs text-muted mb-1 block">Amount ({pair.base})</span>
+          <span className="text-xs text-muted mb-1 block">Amount (USD)</span>
           <input className="input" value={quantity} onChange={(e) => setQuantity(e.target.value)}
             placeholder="0.00" inputMode="decimal" />
         </div>
