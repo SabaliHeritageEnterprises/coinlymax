@@ -46,27 +46,28 @@ export default function TradeTerminal() {
       try {
         const response = await fetch(`${COINLORE_URL}/tickers/?limit=100`);
         const data = await response.json();
-        
+
         if (data.data && Array.isArray(data.data)) {
           const pricesMap: Record<string, { price: number; change: number; high: number; low: number; volume: number }> = {};
           const marketPairs: MarketPair[] = [];
-          
+
+          // ─── PROCESS CRYPTO (quote in USDT) ──────────────────────────
           data.data.forEach((coin: any) => {
             const price = parseFloat(coin.price_usd);
             const change = parseFloat(coin.percent_change_24h);
             const high = price * 1.02;
             const low = price * 0.98;
             const volume = parseFloat(coin.volume24);
-            
-            pricesMap[coin.symbol] = { price, change, high, low, volume };
-            pricesMap[coin.symbol + 'USD'] = { price, change, high, low, volume };
-            
+            const symbol = coin.symbol + 'USDT'; // ✅ USDT suffix
+
+            pricesMap[symbol] = { price, change, high, low, volume };
+
             marketPairs.push({
               id: coin.id,
-              symbol: coin.symbol,
+              symbol: symbol,
               base: coin.symbol,
-              quote: 'USD',
-              displayName: coin.name + ' / USD',
+              quote: 'USDT',
+              displayName: coin.name + ' / USDT',
               type: 'CRYPTO',
               lastPrice: coin.price_usd,
               change24h: coin.percent_change_24h,
@@ -79,7 +80,66 @@ export default function TradeTerminal() {
               isTrending: change > 5,
             });
           });
-          
+
+          // ─── ADD SYNTHETIC USD/USDT PAIR FIRST ──────────────────────
+          const usdUsdtPair: MarketPair = {
+            id: 'usdusdt',
+            symbol: 'USDUSDT',
+            base: 'USD',
+            quote: 'USDT',
+            displayName: 'USD / USDT',
+            type: 'FOREX',
+            lastPrice: '1.00',
+            change24h: '0.00',
+            high24h: '1.00',
+            low24h: '1.00',
+            volume24h: '0',
+            marketCap: '',
+            pricePrecision: 4,
+            qtyPrecision: 4,
+            isTrending: false,
+          };
+          pricesMap['USDUSDT'] = { price: 1, change: 0, high: 1, low: 1, volume: 0 };
+
+          // ─── ADD FOREX PAIRS (keep original symbols, quote in USD) ──
+          const forexPairs = [
+            { symbol: 'EURUSD', name: 'EUR / USD', base: 'EUR', quote: 'USD' },
+            { symbol: 'GBPUSD', name: 'GBP / USD', base: 'GBP', quote: 'USD' },
+            { symbol: 'USDJPY', name: 'USD / JPY', base: 'USD', quote: 'JPY' },
+            { symbol: 'AUDUSD', name: 'AUD / USD', base: 'AUD', quote: 'USD' },
+            { symbol: 'USDCAD', name: 'USD / CAD', base: 'USD', quote: 'CAD' },
+            { symbol: 'USDCHF', name: 'USD / CHF', base: 'USD', quote: 'CHF' },
+            { symbol: 'NZDUSD', name: 'NZD / USD', base: 'NZD', quote: 'USD' },
+          ];
+
+          forexPairs.forEach((pair, idx) => {
+            const price = 1.0; // placeholder – real rates would be fetched separately
+            const change = 0;
+            const symbol = pair.symbol;
+            pricesMap[symbol] = { price, change, high: price * 1.005, low: price * 0.995, volume: 0 };
+
+            marketPairs.push({
+              id: `forex_${idx}`,
+              symbol: symbol,
+              base: pair.base,
+              quote: pair.quote,
+              displayName: pair.name,
+              type: 'FOREX',
+              lastPrice: price.toString(),
+              change24h: change.toString(),
+              high24h: (price * 1.005).toString(),
+              low24h: (price * 0.995).toString(),
+              volume24h: '0',
+              marketCap: '',
+              pricePrecision: 4,
+              qtyPrecision: 4,
+              isTrending: false,
+            });
+          });
+
+          // ✅ Insert USDUSDT at the beginning
+          marketPairs.unshift(usdUsdtPair);
+
           setPairs(marketPairs);
           setRealPrices(pricesMap);
         }
@@ -89,18 +149,20 @@ export default function TradeTerminal() {
         setIsLoading(false);
       }
     };
-    
+
     fetchAllRealData();
     const interval = setInterval(fetchAllRealData, 30000);
     return () => clearInterval(interval);
   }, []);
 
+  // Select the current pair based on URL symbol
   useEffect(() => {
     if (pairs.length === 0) return;
     let found = pairs.find(p => p.symbol === symbol);
     if (!found) {
-      const baseSymbol = symbol.replace('USD', '').replace('USDT', '');
-      found = pairs.find(p => p.symbol === baseSymbol);
+      // Fallback: try to match base symbol
+      const baseSymbol = symbol.replace('USDT', '').replace('USD', '');
+      found = pairs.find(p => p.base === baseSymbol);
     }
     if (!found && pairs.length > 0) {
       found = pairs[0];
@@ -120,7 +182,7 @@ export default function TradeTerminal() {
 
   const currentPairData = pair ? realPrices[pair.symbol] || realPrices[pair.base] : null;
   const liveTicker = pair ? tickers[pair.symbol] : null;
-  
+
   const displayPrice = currentPairData?.price ?? liveTicker?.price ?? (pair ? parseFloat(pair.lastPrice) : 0);
   const displayChange = currentPairData?.change ?? liveTicker?.change24h ?? (pair ? parseFloat(pair.change24h) : 0);
   const displayHigh = currentPairData?.high ?? liveTicker?.high24h ?? (pair ? parseFloat(pair.high24h) : 0);
@@ -196,9 +258,9 @@ export default function TradeTerminal() {
           </section>
 
           <section className="col-span-12 lg:col-span-3 order-3">
-            <OrderPanel 
-              pair={{...pair, lastPrice: displayPrice.toString()}} 
-              onPlaced={refreshUserData} 
+            <OrderPanel
+              pair={{...pair, lastPrice: displayPrice.toString()}}
+              onPlaced={refreshUserData}
             />
           </section>
         </div>
@@ -234,6 +296,7 @@ export default function TradeTerminal() {
   );
 }
 
+// ─── Helper components (unchanged) ──────────────────────────────
 function Stat({ label, value, className }: { label: string; value: string; className?: string }) {
   return (
     <div>
