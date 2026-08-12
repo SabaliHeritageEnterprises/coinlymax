@@ -7,9 +7,9 @@ import { useEffect, useRef, memo } from 'react';
  * Maps internal symbols to TradingView-compatible symbols.
  */
 function mapSymbol(symbol: string, type: 'CRYPTO' | 'FOREX'): string {
-  // ✅ Special case: USD/USDT → use FX_IDC symbol (TradingView's USD/Tether CFD)
+  // ✅ Special case: USD/USDT → use Binance's USDT/USD pair (real data)
   if (symbol === 'USDUSDT') {
-    return 'FX_IDC:USDUSDT';
+    return 'BINANCE:USDTUSD';
   }
 
   // Clean up the symbol - remove USD/USDT suffix
