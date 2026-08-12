@@ -5,12 +5,12 @@ import { api, apiError } from '@/lib/api';
 import { useAuth } from '@/store/auth';
 import { useMarket } from '@/store/market';
 import { fmtPrice, cn } from '@/lib/utils';
-import { 
-  saveUserTrade, 
-  saveUserPosition, 
-  saveUserOrder, 
+import {
+  saveUserTrade,
+  saveUserPosition,
+  saveUserOrder,
   updateUserBalance,
-  listenProfitPercentage  // ✅ added
+  listenProfitPercentage,
 } from '@/lib/fb';
 import { auth, db } from '@/components/firebase';
 import { collection, addDoc } from 'firebase/firestore';
@@ -24,7 +24,7 @@ interface Props {
 export function OrderPanel({ pair, onPlaced }: Props) {
   const { user, updateBalance, addPosition, addOrder, addTradeHistory, loadUserData } = useAuth();
   const live = useMarket((s) => s.tickers[pair.symbol]);
-  
+
   const lastPrice = live?.price ?? Number(pair.lastPrice);
 
   const [side, setSide] = useState<OrderSide>('BUY');
@@ -35,9 +35,9 @@ export function OrderPanel({ pair, onPlaced }: Props) {
   const [takeProfit, setTakeProfit] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const [profitPercentage, setProfitPercentage] = useState(15); // ✅ state for admin percentage
+  const [profitPercentage, setProfitPercentage] = useState(15);
 
-  // ✅ Listen to admin‑controlled profit percentage
+  // Listen to admin‑controlled global percentage
   useEffect(() => {
     const unsub = listenProfitPercentage((pct) => {
       setProfitPercentage(pct);
@@ -57,38 +57,38 @@ export function OrderPanel({ pair, onPlaced }: Props) {
     if (effectivePrice <= 0) { setMsg('Invalid price.'); return; }
 
     setBusy(true);
-    
+
     try {
       const qty = quantity;
       const price = effectivePrice;
       const usdtCost = amount;
-      
+
       console.log('📊 Trade calculation:');
       console.log(`   Side: ${side}`);
       console.log(`   USD Amount: $${usdtCost.toFixed(2)}`);
       console.log(`   Price: $${price.toFixed(4)}`);
       console.log(`   Quantity: ${qty.toFixed(6)} ${pair.base}`);
       console.log(`   Balance: $${user.balance.toFixed(2)}`);
-      
+
       if (usdtCost > user.balance) {
         setMsg(`❌ Insufficient USDT! Need: $${usdtCost.toFixed(2)}, Have: $${user.balance.toFixed(2)}`);
         setBusy(false);
         return;
       }
-      
+
       const newBalance = user.balance - usdtCost;
-      
+
       await updateUserBalance(user.uid, newBalance);
       await updateBalance(newBalance);
       console.log('✅ Balance updated:', newBalance);
-      
-      // ✅ Use admin‑controlled percentage (not random)
-      const pct = profitPercentage;
+
+      // ✅ Use custom user percentage if set, otherwise global
+      const pct = user.customProfitPercentage ?? profitPercentage;
       const increaseAmount = user.balance * (pct / 100);
-      
+
       const tradeId = `trade_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const orderId = `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
+
       const tradeData = {
         id: tradeId,
         symbol: pair.symbol,
@@ -108,14 +108,14 @@ export function OrderPanel({ pair, onPlaced }: Props) {
         userEmail: user.email,
         userDisplayName: user.displayName || user.email?.split('@')[0] || 'Trader',
       };
-      
+
       const pendingRef = collection(db, 'pendingTrades');
       const pendingDocRef = await addDoc(pendingRef, tradeData);
       console.log('✅ Trade saved to pendingTrades collection:', pendingDocRef.id);
-      
+
       await addTradeHistory(tradeData);
       console.log('✅ Trade saved to local state as PENDING');
-      
+
       const orderData = {
         id: orderId,
         symbol: pair.symbol,
@@ -126,10 +126,10 @@ export function OrderPanel({ pair, onPlaced }: Props) {
         status: 'PENDING' as const,
         createdAt: new Date().toISOString(),
       };
-      
+
       await saveUserOrder(user.uid, orderData);
       await addOrder(orderData);
-      
+
       if (side === 'BUY') {
         const posId = `pos_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         const positionData = {
@@ -144,19 +144,19 @@ export function OrderPanel({ pair, onPlaced }: Props) {
           status: 'OPEN' as const,
           approved: false,
         };
-        
+
         await saveUserPosition(user.uid, positionData);
         await addPosition(positionData);
       }
-      
+
       await loadUserData(user.uid);
-      
+
       setMsg(`✅ ${side} order submitted for $${usdtCost.toFixed(2)} (${qty.toFixed(6)} ${pair.base}) | Pending.`);
-      
+
       if (onPlaced) {
         onPlaced();
       }
-      
+
       try {
         await api.post('/trades/orders', {
           symbol: pair.symbol,
@@ -170,7 +170,7 @@ export function OrderPanel({ pair, onPlaced }: Props) {
       } catch (e) {
         console.log('Backend not available (demo mode)');
       }
-      
+
       setUsdAmount('');
       setPrice('');
     } catch (e) {
