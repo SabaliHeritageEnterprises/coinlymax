@@ -44,7 +44,8 @@ export default function AdminTrades() {
   const [pendingTrades, setPendingTrades] = useState<PendingTrade[]>([]);
   const [loading, setLoading] = useState(true);
   const [approving, setApproving] = useState<string | null>(null);
-  const processedIds = useRef<Set<string>>(new Set());
+  // Track IDs that are being processed to hide them immediately
+  const processingIds = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (initialized && (!user || !isAdmin(user.role))) {
@@ -72,11 +73,11 @@ export default function AdminTrades() {
       const trades: PendingTrade[] = [];
       snapshot.forEach((doc) => {
         const data = doc.data();
-        // Skip if already processed or status not PENDING
-        if (data.status === 'PENDING' && !processedIds.current.has(doc.id)) {
+        // Only include if status is PENDING and not in processing set
+        if (data.status === 'PENDING' && !processingIds.current.has(doc.id)) {
           trades.push({ id: doc.id, ...data } as PendingTrade);
         } else {
-          console.log(`⏩ Skipping doc ${doc.id} (status=${data.status}, processed=${processedIds.current.has(doc.id)})`);
+          console.log(`⏩ Skipping doc ${doc.id} (status: ${data.status} or processing)`);
         }
       });
       setPendingTrades(trades);
@@ -93,12 +94,16 @@ export default function AdminTrades() {
   }, [user]);
 
   const handleApprove = async (trade: PendingTrade) => {
+    // Add to processing set to hide immediately
+    processingIds.current.add(trade.id);
     setApproving(trade.id);
+    // Optimistic update: remove from UI
+    setPendingTrades(prev => prev.filter(t => t.id !== trade.id));
+
     try {
       if (!user) {
         alert('You must be logged in to approve trades.');
-        setApproving(null);
-        return;
+        throw new Error('Not logged in');
       }
 
       console.log('✅ Approving trade:', trade.id);
@@ -108,8 +113,7 @@ export default function AdminTrades() {
       const userDoc = await getDoc(userRef);
       if (!userDoc.exists()) {
         alert('User document not found!');
-        setApproving(null);
-        return;
+        throw new Error('User not found');
       }
       const currentBalance = userDoc.data()?.balance || 0;
       const newBalance = currentBalance + trade.pnl;
@@ -128,7 +132,25 @@ export default function AdminTrades() {
       });
       console.log('✅ Trade added to history');
 
-      // 3. Add activity log
+      // 3. Delete pending document (primary)
+      const pendingRef = doc(db, 'pendingTrades', trade.id);
+      try {
+        await deleteDoc(pendingRef);
+        console.log('✅ Pending trade deleted');
+      } catch (deleteError) {
+        console.warn('⚠️ Delete failed, trying to update status instead:', deleteError);
+        // Fallback: update status to APPROVED
+        await updateDoc(pendingRef, {
+          status: 'APPROVED',
+          approved: true,
+          approvedBy: user.uid,
+          approvedAt: new Date().toISOString(),
+          approvedEmail: user.email
+        });
+        console.log('✅ Pending status updated to APPROVED');
+      }
+
+      // 4. Add activity log
       await addDoc(collection(db, 'activity'), {
         type: 'trade_approved',
         uid: user.uid,
@@ -141,11 +163,6 @@ export default function AdminTrades() {
         timestamp: serverTimestamp(),
         status: 'success'
       }).catch(() => {});
-
-      // 4. Delete pending document
-      const pendingRef = doc(db, 'pendingTrades', trade.id);
-      await deleteDoc(pendingRef);
-      console.log('✅ Pending trade deleted');
 
       // 5. Update position if BUY
       if (trade.side === 'BUY') {
@@ -171,25 +188,31 @@ export default function AdminTrades() {
         }
       }
 
-      // ✅ Mark as processed and remove from local state
-      processedIds.current.add(trade.id);
-      setPendingTrades(prev => prev.filter(t => t.id !== trade.id));
       alert('✅ Trade approved successfully!');
     } catch (error) {
       console.error('❌ Error approving trade:', error);
       alert(error instanceof Error ? `Failed to approve trade: ${error.message}` : 'Failed to approve trade.');
+      // If error, remove from processing set so it reappears
+      processingIds.current.delete(trade.id);
+      // Re-fetch will bring it back if still pending
     } finally {
       setApproving(null);
+      // Remove from processing set after operation (even if success, the listener will have removed it)
+      processingIds.current.delete(trade.id);
     }
   };
 
   const handleReject = async (trade: PendingTrade) => {
-    if (!user) {
-      alert('You must be logged in to reject trades.');
-      return;
-    }
+    processingIds.current.add(trade.id);
+    setApproving(trade.id);
+    setPendingTrades(prev => prev.filter(t => t.id !== trade.id));
 
     try {
+      if (!user) {
+        alert('You must be logged in to reject trades.');
+        throw new Error('Not logged in');
+      }
+
       console.log('❌ Rejecting trade:', trade.id);
 
       // 1. Add to trades history
@@ -202,7 +225,22 @@ export default function AdminTrades() {
       });
       console.log('✅ Trade added to history as REJECTED');
 
-      // 2. Add activity log
+      // 2. Delete pending document (primary)
+      const pendingRef = doc(db, 'pendingTrades', trade.id);
+      try {
+        await deleteDoc(pendingRef);
+        console.log('✅ Pending trade deleted');
+      } catch (deleteError) {
+        console.warn('⚠️ Delete failed, updating status to REJECTED:', deleteError);
+        await updateDoc(pendingRef, {
+          status: 'REJECTED',
+          rejectedBy: user.uid,
+          rejectedAt: new Date().toISOString()
+        });
+        console.log('✅ Pending status updated to REJECTED');
+      }
+
+      // 3. Add activity log
       await addDoc(collection(db, 'activity'), {
         type: 'trade_rejected',
         uid: user.uid,
@@ -215,18 +253,14 @@ export default function AdminTrades() {
         status: 'success'
       }).catch(() => {});
 
-      // 3. Delete pending document
-      const pendingRef = doc(db, 'pendingTrades', trade.id);
-      await deleteDoc(pendingRef);
-      console.log('✅ Pending trade deleted');
-
-      // ✅ Mark as processed and remove from local state
-      processedIds.current.add(trade.id);
-      setPendingTrades(prev => prev.filter(t => t.id !== trade.id));
       alert('✅ Trade rejected successfully!');
     } catch (error) {
       console.error('❌ Error rejecting trade:', error);
       alert(error instanceof Error ? `Failed to reject trade: ${error.message}` : 'Failed to reject trade.');
+      processingIds.current.delete(trade.id);
+    } finally {
+      setApproving(null);
+      processingIds.current.delete(trade.id);
     }
   };
 
@@ -268,6 +302,9 @@ export default function AdminTrades() {
                       <span className="text-xs px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-500">
                         PENDING
                       </span>
+                      {approving === trade.id && (
+                        <span className="text-xs text-blue-400 animate-pulse">Processing...</span>
+                      )}
                     </div>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-muted">
                       <div>
