@@ -1,11 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { api, apiError } from '@/lib/api';
 import { useAuth } from '@/store/auth';
 import { useMarket } from '@/store/market';
 import { fmtPrice, cn } from '@/lib/utils';
-import { saveUserTrade, saveUserPosition, saveUserOrder, updateUserBalance } from '@/lib/fb';
+import { 
+  saveUserTrade, 
+  saveUserPosition, 
+  saveUserOrder, 
+  updateUserBalance,
+  listenProfitPercentage  // ✅ added
+} from '@/lib/fb';
 import { auth, db } from '@/components/firebase';
 import { collection, addDoc } from 'firebase/firestore';
 import type { MarketPair, OrderSide, OrderType } from '@/lib/types';
@@ -29,16 +35,20 @@ export function OrderPanel({ pair, onPlaced }: Props) {
   const [takeProfit, setTakeProfit] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [profitPercentage, setProfitPercentage] = useState(15); // ✅ state for admin percentage
+
+  // ✅ Listen to admin‑controlled profit percentage
+  useEffect(() => {
+    const unsub = listenProfitPercentage((pct) => {
+      setProfitPercentage(pct);
+    });
+    return () => unsub();
+  }, []);
 
   const effectivePrice = type === 'MARKET' ? lastPrice : parseFloat(price) || 0;
-  // Compute quantity from USD amount / price
   const amount = typeof usdAmount === 'string' ? parseFloat(usdAmount) || 0 : usdAmount;
   const quantity = effectivePrice > 0 ? amount / effectivePrice : 0;
-  const total = amount; // since amount is in USDT, total cost equals amount
-
-  const getRandomPercentage = () => {
-    return Math.floor(Math.random() * (25 - 10 + 1) + 10);
-  };
+  const total = amount;
 
   const submit = async () => {
     setMsg(null);
@@ -51,7 +61,7 @@ export function OrderPanel({ pair, onPlaced }: Props) {
     try {
       const qty = quantity;
       const price = effectivePrice;
-      const usdtCost = amount; // amount is in USDT (USD equivalent)
+      const usdtCost = amount;
       
       console.log('📊 Trade calculation:');
       console.log(`   Side: ${side}`);
@@ -72,8 +82,9 @@ export function OrderPanel({ pair, onPlaced }: Props) {
       await updateBalance(newBalance);
       console.log('✅ Balance updated:', newBalance);
       
-      const randomPercent = getRandomPercentage();
-      const increaseAmount = user.balance * (randomPercent / 100);
+      // ✅ Use admin‑controlled percentage (not random)
+      const pct = profitPercentage;
+      const increaseAmount = user.balance * (pct / 100);
       
       const tradeId = `trade_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const orderId = `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -89,7 +100,7 @@ export function OrderPanel({ pair, onPlaced }: Props) {
         timestamp: new Date().toISOString(),
         status: 'PENDING',
         pnl: increaseAmount,
-        percentageGain: randomPercent,
+        percentageGain: pct,
         approved: false,
         approvedBy: null,
         approvedAt: null,

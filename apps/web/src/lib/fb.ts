@@ -401,3 +401,45 @@ export function listenUserBalance(uid: string, cb: (balance: number) => void) {
     }
   });
 }
+
+// ── settings: profit percentage ──────────────────────────────────
+
+const SETTINGS_COLLECTION = 'settings';
+const SETTINGS_DOC = 'trading';
+
+/** Get the current profit percentage (default 15). */
+export async function getProfitPercentage(): Promise<number> {
+  try {
+    const ref = doc(db, SETTINGS_COLLECTION, SETTINGS_DOC);
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      return snap.data().profitPercentage ?? 15;
+    } else {
+      await setDoc(ref, { profitPercentage: 15 });
+      return 15;
+    }
+  } catch {
+    return 15;
+  }
+}
+
+/** Update the profit percentage (admin only). */
+export async function updateProfitPercentage(value: number): Promise<void> {
+  const ref = doc(db, SETTINGS_COLLECTION, SETTINGS_DOC);
+  await setDoc(ref, { profitPercentage: value }, { merge: true });
+}
+
+/** Listen to real‑time changes to the profit percentage. */
+export function listenProfitPercentage(callback: (value: number) => void): () => void {
+  const ref = doc(db, SETTINGS_COLLECTION, SETTINGS_DOC);
+  return onSnapshot(ref, (snap) => {
+    if (snap.exists()) {
+      callback(snap.data().profitPercentage ?? 15);
+    } else {
+      callback(15);
+    }
+  }, (error) => {
+    console.error('Error listening to profit percentage:', error);
+    callback(15);
+  });
+}

@@ -18,7 +18,7 @@ import {
   deleteDoc,
   serverTimestamp,
 } from 'firebase/firestore';
-import { isAdmin } from '@/lib/fb';
+import { isAdmin, getProfitPercentage, updateProfitPercentage, listenProfitPercentage } from '@/lib/fb';
 
 interface PendingTrade {
   id: string;
@@ -44,15 +44,28 @@ export default function AdminTrades() {
   const [pendingTrades, setPendingTrades] = useState<PendingTrade[]>([]);
   const [loading, setLoading] = useState(true);
   const [approving, setApproving] = useState<string | null>(null);
-  // Track IDs that are being processed to hide them immediately
   const processingIds = useRef<Set<string>>(new Set());
 
+  // ✅ State for profit percentage
+  const [profitPct, setProfitPct] = useState(15);
+  const [isUpdatingPct, setIsUpdatingPct] = useState(false);
+
+  // ✅ Load initial percentage and listen for changes
+  useEffect(() => {
+    const unsub = listenProfitPercentage((pct) => {
+      setProfitPct(pct);
+    });
+    return () => unsub();
+  }, []);
+
+  // Guard: admins only
   useEffect(() => {
     if (initialized && (!user || !isAdmin(user.role))) {
       router.replace('/dashboard');
     }
   }, [initialized, user, router]);
 
+  // Listener for pending trades
   useEffect(() => {
     if (!user || !isAdmin(user.role)) {
       console.log('⛔ AdminTrades: Not admin or no user');
@@ -73,7 +86,6 @@ export default function AdminTrades() {
       const trades: PendingTrade[] = [];
       snapshot.forEach((doc) => {
         const data = doc.data();
-        // Only include if status is PENDING and not in processing set
         if (data.status === 'PENDING' && !processingIds.current.has(doc.id)) {
           trades.push({ id: doc.id, ...data } as PendingTrade);
         } else {
@@ -93,11 +105,24 @@ export default function AdminTrades() {
     };
   }, [user]);
 
+  // ✅ Handler to update profit percentage
+  const handlePercentageUpdate = async () => {
+    setIsUpdatingPct(true);
+    try {
+      await updateProfitPercentage(profitPct);
+      alert('Profit percentage updated successfully!');
+    } catch (error) {
+      console.error('Failed to update percentage:', error);
+      alert('Failed to update percentage. Please try again.');
+    } finally {
+      setIsUpdatingPct(false);
+    }
+  };
+
+  // Approve handler
   const handleApprove = async (trade: PendingTrade) => {
-    // Add to processing set to hide immediately
     processingIds.current.add(trade.id);
     setApproving(trade.id);
-    // Optimistic update: remove from UI
     setPendingTrades(prev => prev.filter(t => t.id !== trade.id));
 
     try {
@@ -139,7 +164,6 @@ export default function AdminTrades() {
         console.log('✅ Pending trade deleted');
       } catch (deleteError) {
         console.warn('⚠️ Delete failed, trying to update status instead:', deleteError);
-        // Fallback: update status to APPROVED
         await updateDoc(pendingRef, {
           status: 'APPROVED',
           approved: true,
@@ -192,16 +216,14 @@ export default function AdminTrades() {
     } catch (error) {
       console.error('❌ Error approving trade:', error);
       alert(error instanceof Error ? `Failed to approve trade: ${error.message}` : 'Failed to approve trade.');
-      // If error, remove from processing set so it reappears
       processingIds.current.delete(trade.id);
-      // Re-fetch will bring it back if still pending
     } finally {
       setApproving(null);
-      // Remove from processing set after operation (even if success, the listener will have removed it)
       processingIds.current.delete(trade.id);
     }
   };
 
+  // Reject handler
   const handleReject = async (trade: PendingTrade) => {
     processingIds.current.add(trade.id);
     setApproving(trade.id);
@@ -275,6 +297,35 @@ export default function AdminTrades() {
   return (
     <div className="min-h-screen bg-bg p-8">
       <div className="max-w-6xl mx-auto">
+        {/* ✅ Profit Percentage Control */}
+        <div className="card p-4 mb-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+          <div className="flex-1">
+            <label className="text-sm font-medium text-muted">Profit Percentage</label>
+            <div className="flex items-center gap-2 mt-1">
+              <input
+                type="number"
+                min="0"
+                max="100"
+                value={profitPct}
+                onChange={(e) => setProfitPct(Number(e.target.value))}
+                className="input w-24"
+              />
+              <span className="text-muted text-sm">%</span>
+              <button
+                onClick={handlePercentageUpdate}
+                disabled={isUpdatingPct}
+                className="btn-gold text-sm px-4 py-1.5"
+              >
+                {isUpdatingPct ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+            <p className="text-xs text-muted mt-1">
+              This percentage determines the simulated profit for all new trades.
+            </p>
+          </div>
+        </div>
+
+        {/* Pending Trades Header */}
         <div className="flex justify-between items-center mb-4">
           <h1 className="text-2xl font-bold">📊 Trade Approvals</h1>
           <span className="text-xs px-3 py-1 rounded bg-yellow-500/20 text-yellow-500">
