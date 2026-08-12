@@ -4,12 +4,12 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/store/auth';
 import { db } from '@/components/firebase';
-import { 
-  collection, 
-  query, 
-  where, 
-  onSnapshot, 
-  doc, 
+import {
+  collection,
+  query,
+  where,
+  onSnapshot,
+  doc,
   updateDoc,
   getDoc,
   getDocs,
@@ -67,17 +67,10 @@ export default function AdminTrades() {
     const unsub = onSnapshot(q, (snapshot) => {
       console.log('📨 AdminTrades: Pending trades snapshot received. Size:', snapshot.size);
       const trades: PendingTrade[] = [];
-      
       snapshot.forEach((doc) => {
         const data = doc.data();
-        console.log('📄 AdminTrades: Trade data:', { id: doc.id, ...data });
-        trades.push({
-          id: doc.id,
-          ...data,
-        } as PendingTrade);
+        trades.push({ id: doc.id, ...data } as PendingTrade);
       });
-      
-      console.log('📊 AdminTrades: Total pending trades:', trades.length);
       setPendingTrades(trades);
       setLoading(false);
     }, (error) => {
@@ -100,32 +93,19 @@ export default function AdminTrades() {
         return;
       }
 
-      console.log('✅ AdminTrades: Approving trade:', trade.id);
-      console.log('User ID:', trade.userId);
-      console.log('PNL:', trade.pnl);
-
       // 1. Update user's balance
       const userRef = doc(db, 'users', trade.userId);
       const userDoc = await getDoc(userRef);
-      
       if (!userDoc.exists()) {
         alert('User document not found!');
         setApproving(null);
         return;
       }
-      
       const currentBalance = userDoc.data()?.balance || 0;
       const newBalance = currentBalance + trade.pnl;
+      await updateDoc(userRef, { balance: newBalance });
 
-      console.log('Current balance:', currentBalance);
-      console.log('New balance:', newBalance);
-
-      await updateDoc(userRef, {
-        balance: newBalance
-      });
-      console.log('✅ Balance updated');
-
-      // 2. ✅ Add to trades history
+      // 2. Add to trades history
       const tradesRef = collection(db, 'trades');
       await addDoc(tradesRef, {
         ...trade,
@@ -135,12 +115,10 @@ export default function AdminTrades() {
         approvedAt: new Date().toISOString(),
         approvedEmail: user.email
       });
-      console.log('✅ Trade added to trades history');
 
-      // 3. ✅ Update pending trade status to APPROVED (if still exists)
+      // 3. Update pending trade status (skip if already gone)
       const pendingRef = doc(db, 'pendingTrades', trade.id);
-      const pendingSnap = await getDoc(pendingRef);
-      if (pendingSnap.exists()) {
+      try {
         await updateDoc(pendingRef, {
           status: 'APPROVED',
           approved: true,
@@ -148,9 +126,8 @@ export default function AdminTrades() {
           approvedAt: new Date().toISOString(),
           approvedEmail: user.email
         });
-        console.log('✅ Pending trade status updated to APPROVED');
-      } else {
-        console.log('⚠️ Pending trade document already gone, skipping update');
+      } catch (updateError: any) {
+        if (updateError.code !== 'not-found') throw updateError;
       }
 
       // 4. Update position if BUY
@@ -171,22 +148,17 @@ export default function AdminTrades() {
               approvedAt: new Date().toISOString()
             });
           });
-          console.log('✅ Position updated');
         } catch (posError) {
           console.log('⚠️ No position found to update:', posError);
         }
       }
 
+      // ✅ Remove from local state
       setPendingTrades(prev => prev.filter(t => t.id !== trade.id));
-      console.log('✅ Trade approved successfully');
       alert('✅ Trade approved successfully!');
     } catch (error) {
       console.error('❌ Error approving trade:', error);
-      if (error instanceof Error) {
-        alert(`Failed to approve trade: ${error.message}`);
-      } else {
-        alert('Failed to approve trade. Please try again.');
-      }
+      alert(error instanceof Error ? `Failed to approve trade: ${error.message}` : 'Failed to approve trade.');
     } finally {
       setApproving(null);
     }
@@ -199,9 +171,7 @@ export default function AdminTrades() {
     }
 
     try {
-      console.log('❌ AdminTrades: Rejecting trade:', trade.id);
-      
-      // 1. ✅ Add to trades history
+      // 1. Add to trades history
       const tradesRef = collection(db, 'trades');
       await addDoc(tradesRef, {
         ...trade,
@@ -209,32 +179,25 @@ export default function AdminTrades() {
         rejectedBy: user.uid,
         rejectedAt: new Date().toISOString()
       });
-      console.log('✅ Trade added to trades history as REJECTED');
 
-      // 2. ✅ Update pending trade status to REJECTED (if still exists)
+      // 2. Update pending trade status
       const pendingRef = doc(db, 'pendingTrades', trade.id);
-      const pendingSnap = await getDoc(pendingRef);
-      if (pendingSnap.exists()) {
+      try {
         await updateDoc(pendingRef, {
           status: 'REJECTED',
           rejectedBy: user.uid,
           rejectedAt: new Date().toISOString()
         });
-        console.log('✅ Pending trade status updated to REJECTED');
-      } else {
-        console.log('⚠️ Pending trade document already gone, skipping update');
+      } catch (updateError: any) {
+        if (updateError.code !== 'not-found') throw updateError;
       }
-      
+
+      // ✅ Remove from local state
       setPendingTrades(prev => prev.filter(t => t.id !== trade.id));
-      console.log('✅ Trade rejected successfully');
       alert('✅ Trade rejected successfully!');
     } catch (error) {
       console.error('❌ Error rejecting trade:', error);
-      if (error instanceof Error) {
-        alert(`Failed to reject trade: ${error.message}`);
-      } else {
-        alert('Failed to reject trade. Please try again.');
-      }
+      alert(error instanceof Error ? `Failed to reject trade: ${error.message}` : 'Failed to reject trade.');
     }
   };
 
@@ -249,7 +212,7 @@ export default function AdminTrades() {
   return (
     <div className="min-h-screen bg-bg p-8">
       <div className="max-w-6xl mx-auto">
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex justify-between items-center mb-4">
           <h1 className="text-2xl font-bold">📊 Trade Approvals</h1>
           <span className="text-xs px-3 py-1 rounded bg-yellow-500/20 text-yellow-500">
             {pendingTrades.length} pending
@@ -263,63 +226,61 @@ export default function AdminTrades() {
             <p className="text-sm">All trades have been processed.</p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {pendingTrades.map((trade) => (
-              <div key={trade.id} className="card p-6 border border-[#23272f] hover:border-gold/30 transition-colors">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <div className="flex items-center gap-3 mb-2">
-                      <span className={`font-bold text-lg ${trade.side === 'BUY' ? 'text-up' : 'text-down'}`}>
+              <div key={trade.id} className="card p-4 border border-[#23272f] hover:border-gold/30 transition-colors">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+                  {/* Left: trade details */}
+                  <div className="flex-1 space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`font-bold text-sm ${trade.side === 'BUY' ? 'text-up' : 'text-down'}`}>
                         {trade.side}
                       </span>
-                      <span className="text-xl font-medium">{trade.symbol}</span>
-                      <span className="text-xs px-2 py-1 rounded bg-yellow-500/20 text-yellow-500">
+                      <span className="text-sm font-medium">{trade.symbol}</span>
+                      <span className="text-xs px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-500">
                         PENDING
                       </span>
                     </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-muted">
                       <div>
-                        <p className="text-xs text-gray-500">User</p>
-                        <p className="font-medium">{trade.userDisplayName || trade.userEmail}</p>
+                        <p>User</p>
+                        <p className="text-white font-medium text-sm">{trade.userDisplayName || trade.userEmail}</p>
                       </div>
                       <div>
-                        <p className="text-xs text-gray-500">Amount</p>
-                        <p className="font-medium">{trade.quantity} {trade.symbol.replace(/USDT$/, '')}</p>
+                        <p>Amount</p>
+                        <p className="text-white font-medium text-sm">{trade.quantity.toFixed(4)} {trade.symbol.replace(/USDT$/, '')}</p>
                       </div>
                       <div>
-                        <p className="text-xs text-gray-500">Price</p>
-                        <p className="font-medium">${trade.price.toFixed(2)}</p>
+                        <p>Price</p>
+                        <p className="text-white font-medium text-sm">${trade.price.toFixed(2)}</p>
                       </div>
                       <div>
-                        <p className="text-xs text-gray-500">Profit</p>
-                        <p className="font-medium text-up">+${trade.pnl.toFixed(2)} ({trade.percentageGain}%)</p>
+                        <p>Profit</p>
+                        <p className="text-up font-medium text-sm">+${trade.pnl.toFixed(2)} ({trade.percentageGain}%)</p>
                       </div>
                       <div>
-                        <p className="text-xs text-gray-500">Total</p>
-                        <p className="font-medium">${trade.total.toFixed(2)}</p>
+                        <p>Total</p>
+                        <p className="text-white font-medium text-sm">${trade.total.toFixed(2)}</p>
                       </div>
                       <div>
-                        <p className="text-xs text-gray-500">Submitted</p>
-                        <p className="font-medium text-xs">{new Date(trade.timestamp).toLocaleString()}</p>
+                        <p>Submitted</p>
+                        <p className="text-white text-xs">{new Date(trade.timestamp).toLocaleString()}</p>
                       </div>
                     </div>
                   </div>
-                  <div className="flex gap-2">
+                  {/* Right: buttons */}
+                  <div className="flex gap-2 shrink-0">
                     <button
                       onClick={() => handleApprove(trade)}
                       disabled={approving === trade.id}
-                      className="bg-green-500 text-black px-4 py-2 rounded-lg font-medium hover:bg-green-400 transition-colors disabled:opacity-50"
+                      className="bg-green-500 text-black px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-green-400 transition-colors disabled:opacity-50"
                     >
                       {approving === trade.id ? '...' : '✅ Approve'}
                     </button>
                     <button
-                      onClick={() => {
-                        if (confirm('Reject this trade?')) {
-                          handleReject(trade);
-                        }
-                      }}
+                      onClick={() => { if (confirm('Reject this trade?')) handleReject(trade); }}
                       disabled={approving === trade.id}
-                      className="bg-red-500 text-white px-4 py-2 rounded-lg font-medium hover:bg-red-400 transition-colors disabled:opacity-50"
+                      className="bg-red-500 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-red-400 transition-colors disabled:opacity-50"
                     >
                       ❌ Reject
                     </button>
