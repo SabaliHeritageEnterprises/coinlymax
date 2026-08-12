@@ -14,7 +14,6 @@ import {
   getDoc,
   getDocs,
   orderBy,
-  deleteDoc,
   addDoc
 } from 'firebase/firestore';
 import { isAdmin } from '@/lib/fb';
@@ -126,9 +125,7 @@ export default function AdminTrades() {
       });
       console.log('✅ Balance updated');
 
-      // 2. ✅ Move trade from pendingTrades to trades history
-      const pendingRef = doc(db, 'pendingTrades', trade.id);
-      
+      // 2. ✅ Add to trades history
       const tradesRef = collection(db, 'trades');
       await addDoc(tradesRef, {
         ...trade,
@@ -140,9 +137,16 @@ export default function AdminTrades() {
       });
       console.log('✅ Trade added to trades history');
 
-      // 3. ✅ Delete from pendingTrades
-      await deleteDoc(pendingRef);
-      console.log('✅ Pending trade deleted');
+      // 3. ✅ Update pending trade status to APPROVED (instead of deleting)
+      const pendingRef = doc(db, 'pendingTrades', trade.id);
+      await updateDoc(pendingRef, {
+        status: 'APPROVED',
+        approved: true,
+        approvedBy: user.uid,
+        approvedAt: new Date().toISOString(),
+        approvedEmail: user.email
+      });
+      console.log('✅ Pending trade status updated to APPROVED');
 
       // 4. Update position if BUY
       if (trade.side === 'BUY') {
@@ -173,7 +177,6 @@ export default function AdminTrades() {
       alert('✅ Trade approved successfully!');
     } catch (error) {
       console.error('❌ Error approving trade:', error);
-      // ✅ Fix: Handle unknown error type
       if (error instanceof Error) {
         alert(`Failed to approve trade: ${error.message}`);
       } else {
@@ -193,6 +196,7 @@ export default function AdminTrades() {
     try {
       console.log('❌ AdminTrades: Rejecting trade:', trade.id);
       
+      // 1. ✅ Add to trades history
       const tradesRef = collection(db, 'trades');
       await addDoc(tradesRef, {
         ...trade,
@@ -202,16 +206,20 @@ export default function AdminTrades() {
       });
       console.log('✅ Trade added to trades history as REJECTED');
 
+      // 2. ✅ Update pending trade status to REJECTED
       const pendingRef = doc(db, 'pendingTrades', trade.id);
-      await deleteDoc(pendingRef);
-      console.log('✅ Pending trade deleted');
+      await updateDoc(pendingRef, {
+        status: 'REJECTED',
+        rejectedBy: user.uid,
+        rejectedAt: new Date().toISOString()
+      });
+      console.log('✅ Pending trade status updated to REJECTED');
       
       setPendingTrades(prev => prev.filter(t => t.id !== trade.id));
       console.log('✅ Trade rejected successfully');
       alert('✅ Trade rejected successfully!');
     } catch (error) {
       console.error('❌ Error rejecting trade:', error);
-      // ✅ Fix: Handle unknown error type
       if (error instanceof Error) {
         alert(`Failed to reject trade: ${error.message}`);
       } else {
