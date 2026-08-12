@@ -24,14 +24,17 @@ export function OrderPanel({ pair, onPlaced }: Props) {
   const [side, setSide] = useState<OrderSide>('BUY');
   const [type, setType] = useState<OrderType>('MARKET');
   const [price, setPrice] = useState('');
-  const [quantity, setQuantity] = useState('');
+  const [usdAmount, setUsdAmount] = useState<number | string>('');
   const [stopLoss, setStopLoss] = useState('');
   const [takeProfit, setTakeProfit] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
   const effectivePrice = type === 'MARKET' ? lastPrice : parseFloat(price) || 0;
-  const total = (parseFloat(quantity) || 0) * effectivePrice;
+  // Compute quantity from USD amount / price
+  const amount = typeof usdAmount === 'string' ? parseFloat(usdAmount) || 0 : usdAmount;
+  const quantity = effectivePrice > 0 ? amount / effectivePrice : 0;
+  const total = amount; // since amount is in USDT, total cost equals amount
 
   const getRandomPercentage = () => {
     return Math.floor(Math.random() * (25 - 10 + 1) + 10);
@@ -40,21 +43,21 @@ export function OrderPanel({ pair, onPlaced }: Props) {
   const submit = async () => {
     setMsg(null);
     if (!user) { setMsg('Please log in to trade.'); return; }
-    if (!quantity || parseFloat(quantity) <= 0) { setMsg('Enter a quantity.'); return; }
-    
+    if (amount <= 0) { setMsg('Enter a valid amount in USD.'); return; }
+    if (effectivePrice <= 0) { setMsg('Invalid price.'); return; }
+
     setBusy(true);
     
     try {
-      const qty = parseFloat(quantity);
+      const qty = quantity;
       const price = effectivePrice;
-      
-      const usdtCost = qty * price;
+      const usdtCost = amount; // amount is in USDT (USD equivalent)
       
       console.log('📊 Trade calculation:');
       console.log(`   Side: ${side}`);
-      console.log(`   Quantity: ${qty} ${pair.base}`);
+      console.log(`   USD Amount: $${usdtCost.toFixed(2)}`);
       console.log(`   Price: $${price.toFixed(4)}`);
-      console.log(`   USDT Cost: $${usdtCost.toFixed(2)}`);
+      console.log(`   Quantity: ${qty.toFixed(6)} ${pair.base}`);
       console.log(`   Balance: $${user.balance.toFixed(2)}`);
       
       if (usdtCost > user.balance) {
@@ -137,7 +140,7 @@ export function OrderPanel({ pair, onPlaced }: Props) {
       
       await loadUserData(user.uid);
       
-      setMsg(`✅ ${side} order submitted for ${qty} ${pair.base} | Pending.`);
+      setMsg(`✅ ${side} order submitted for $${usdtCost.toFixed(2)} (${qty.toFixed(6)} ${pair.base}) | Pending.`);
       
       if (onPlaced) {
         onPlaced();
@@ -157,7 +160,7 @@ export function OrderPanel({ pair, onPlaced }: Props) {
         console.log('Backend not available (demo mode)');
       }
       
-      setQuantity('');
+      setUsdAmount('');
       setPrice('');
     } catch (e) {
       console.error('❌ Trade error:', e);
@@ -208,8 +211,16 @@ export function OrderPanel({ pair, onPlaced }: Props) {
         )}
         <div className="block">
           <span className="text-xs text-muted mb-1 block">Amount (USD)</span>
-          <input className="input" value={quantity} onChange={(e) => setQuantity(e.target.value)}
-            placeholder="0.00" inputMode="decimal" />
+          <input
+            className="input"
+            type="number"
+            step="0.01"
+            min="0"
+            value={usdAmount}
+            onChange={(e) => setUsdAmount(e.target.value)}
+            placeholder="Enter USD amount"
+            inputMode="decimal"
+          />
         </div>
 
         <div className="grid grid-cols-2 gap-2">
@@ -230,7 +241,7 @@ export function OrderPanel({ pair, onPlaced }: Props) {
         {user && (
           <div className="flex justify-between text-xs text-muted">
             <span>Available</span>
-            <span className="tabular-nums">{fmtPrice(user.balance ?? 0)} USDT</span>
+            <span className="tabular-nums">{fmtPrice(user.balance ?? 0)} {pair.quote}</span>
           </div>
         )}
 
