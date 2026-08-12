@@ -58,7 +58,7 @@ export default function TradeTerminal() {
             const high = price * 1.02;
             const low = price * 0.98;
             const volume = parseFloat(coin.volume24);
-            const symbol = coin.symbol + 'USDT'; // ✅ USDT suffix
+            const symbol = coin.symbol + 'USDT';
 
             pricesMap[symbol] = { price, change, high, low, volume };
 
@@ -254,21 +254,7 @@ export default function TradeTerminal() {
           </aside>
 
           <section className="col-span-12 lg:col-span-7 order-1 lg:order-2">
-            {pair.symbol === 'USDUSDT' ? (
-              <div className="card p-6 flex flex-col items-center justify-center h-[560px] text-center">
-                <div className="text-4xl mb-4">💵</div>
-                <h2 className="text-2xl font-bold text-gold">USD / USDT</h2>
-                <p className="text-muted text-lg mt-2">1.0000 USDT</p>
-                <p className="text-sm text-muted mt-4">This is a stable pair with a fixed price of 1.00.</p>
-                <div className="w-full max-w-sm h-12 mt-6 bg-bg-hover rounded-full relative overflow-hidden">
-                  <div className="absolute inset-0 flex items-center justify-center text-xs text-muted/50">
-                    ─── flat ───
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <TradingViewChart symbol={pair.symbol} type={pair.type} height={560} />
-            )}
+            <TradingViewChart symbol={pair.symbol} type={pair.type} height={560} />
           </section>
 
           <section className="col-span-12 lg:col-span-3 order-3">

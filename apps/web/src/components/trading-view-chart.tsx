@@ -7,6 +7,11 @@ import { useEffect, useRef, memo } from 'react';
  * Maps internal symbols to TradingView-compatible symbols.
  */
 function mapSymbol(symbol: string, type: 'CRYPTO' | 'FOREX'): string {
+  // ✅ Special case: USD/USDT → use FX_IDC symbol (TradingView's USD/Tether CFD)
+  if (symbol === 'USDUSDT') {
+    return 'FX_IDC:USDUSDT';
+  }
+
   // Clean up the symbol - remove USD/USDT suffix
   let cleanSymbol = symbol.toUpperCase();
   cleanSymbol = cleanSymbol.replace('USDT', '').replace('USD', '');
