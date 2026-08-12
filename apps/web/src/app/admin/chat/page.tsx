@@ -34,7 +34,7 @@ export default function AdminChat() {
   const [user, setUser] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [selectedUser, setSelectedUser] = useState<string | null>(null); // ✅ ADDED: Track selected user
+  const [selectedUser, setSelectedUser] = useState<string | null>(null);
 
   useEffect(() => {
     const unsub = auth.onAuthStateChanged((user) => {
@@ -99,38 +99,36 @@ export default function AdminChat() {
     };
   }, [user, isAdmin]);
 
-  // ✅ NEW: Handle individual user reply
+  // ✅ Handle individual user reply
   const handleReply = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || !user) return;
     
-    // ✅ Check if a user is selected
     if (!selectedUser) {
       alert('Please select a user from the list to reply to');
       return;
     }
 
-    // ✅ Find the selected user's info
     const userMessages = messages.filter(msg => msg.uid === selectedUser);
     const lastUserMsg = userMessages.find(msg => msg.type === 'user');
     const displayName = lastUserMsg?.displayName || 'User';
 
     try {
       const docRef = await addDoc(collection(db, 'chats'), {
-        uid: user.uid,
-        email: user.email || 'support@apextrade.com',
+        // ✅ Set uid to the selected user so they see it in their query
+        uid: selectedUser,
+        email: 'support@coinlymax.com',
         displayName: `Support (to ${displayName})`,
         text: input.trim(),
         timestamp: serverTimestamp(),
         read: false,
         type: 'support',
-        replyToUid: selectedUser, // ✅ Track which user this reply is for
+        replyToUid: selectedUser,
         replyToName: displayName
       });
       console.log('✅ Reply sent to user:', selectedUser, 'ID:', docRef.id);
       setInput('');
       
-      // ✅ Mark user's messages as read
       await markUserMessagesAsRead(selectedUser);
     } catch (error) {
       console.error('Error sending reply:', error);
@@ -157,7 +155,7 @@ export default function AdminChat() {
     }
   };
 
-  // ✅ Get unique users from messages
+  // Get unique users from messages
   const uniqueUsers = messages.reduce((acc, msg) => {
     if (msg.type === 'user' && !acc.find(u => u.uid === msg.uid)) {
       acc.push({ uid: msg.uid, displayName: msg.displayName, email: msg.email });
@@ -165,12 +163,12 @@ export default function AdminChat() {
     return acc;
   }, [] as { uid: string; displayName: string; email: string }[]);
 
-  // ✅ Filter messages for selected user
+  // Filter messages for selected user
   const filteredMessages = selectedUser 
     ? messages.filter(msg => msg.uid === selectedUser || (msg.type === 'support' && msg.replyToUid === selectedUser))
     : messages;
 
-  // ✅ Get user's unread count
+  // Get user's unread count
   const getUnreadCount = (uid: string) => {
     return messages.filter(m => m.uid === uid && m.type === 'user' && !m.read).length;
   };
@@ -193,7 +191,6 @@ export default function AdminChat() {
 
   return (
     <div className="space-y-4">
-      {/* ✅ Show selected user info */}
       <div className="flex items-center justify-between">
         <h3 className="font-semibold text-sm text-gray-400">
           {selectedUser 
