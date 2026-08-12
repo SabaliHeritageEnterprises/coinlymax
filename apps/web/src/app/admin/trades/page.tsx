@@ -137,16 +137,21 @@ export default function AdminTrades() {
       });
       console.log('✅ Trade added to trades history');
 
-      // 3. ✅ Update pending trade status to APPROVED (instead of deleting)
+      // 3. ✅ Update pending trade status to APPROVED (if still exists)
       const pendingRef = doc(db, 'pendingTrades', trade.id);
-      await updateDoc(pendingRef, {
-        status: 'APPROVED',
-        approved: true,
-        approvedBy: user.uid,
-        approvedAt: new Date().toISOString(),
-        approvedEmail: user.email
-      });
-      console.log('✅ Pending trade status updated to APPROVED');
+      const pendingSnap = await getDoc(pendingRef);
+      if (pendingSnap.exists()) {
+        await updateDoc(pendingRef, {
+          status: 'APPROVED',
+          approved: true,
+          approvedBy: user.uid,
+          approvedAt: new Date().toISOString(),
+          approvedEmail: user.email
+        });
+        console.log('✅ Pending trade status updated to APPROVED');
+      } else {
+        console.log('⚠️ Pending trade document already gone, skipping update');
+      }
 
       // 4. Update position if BUY
       if (trade.side === 'BUY') {
@@ -206,14 +211,19 @@ export default function AdminTrades() {
       });
       console.log('✅ Trade added to trades history as REJECTED');
 
-      // 2. ✅ Update pending trade status to REJECTED
+      // 2. ✅ Update pending trade status to REJECTED (if still exists)
       const pendingRef = doc(db, 'pendingTrades', trade.id);
-      await updateDoc(pendingRef, {
-        status: 'REJECTED',
-        rejectedBy: user.uid,
-        rejectedAt: new Date().toISOString()
-      });
-      console.log('✅ Pending trade status updated to REJECTED');
+      const pendingSnap = await getDoc(pendingRef);
+      if (pendingSnap.exists()) {
+        await updateDoc(pendingRef, {
+          status: 'REJECTED',
+          rejectedBy: user.uid,
+          rejectedAt: new Date().toISOString()
+        });
+        console.log('✅ Pending trade status updated to REJECTED');
+      } else {
+        console.log('⚠️ Pending trade document already gone, skipping update');
+      }
       
       setPendingTrades(prev => prev.filter(t => t.id !== trade.id));
       console.log('✅ Trade rejected successfully');
