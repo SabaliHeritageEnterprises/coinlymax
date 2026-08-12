@@ -108,9 +108,10 @@ export const useMarket = create<MarketState>((set, get) => ({
         cryptoData.data.forEach((coin: any) => {
           const price = parseFloat(coin.price_usd);
           const change = parseFloat(coin.percent_change_24h);
+          const symbol = coin.symbol + 'USDT'; // ✅ Use USDT suffix for trading pairs
           
-          newTickers[coin.symbol] = {
-            symbol: coin.symbol,
+          newTickers[symbol] = {
+            symbol: symbol,
             price: price,
             change24h: change,
             high24h: price * 1.02,
@@ -121,10 +122,10 @@ export const useMarket = create<MarketState>((set, get) => ({
           
           newPairs.push({
             id: coin.id,
-            symbol: coin.symbol,
-            base: coin.symbol,
-            quote: 'USD',
-            displayName: coin.name,
+            symbol: symbol,                     // e.g., "BTCUSDT"
+            base: coin.symbol,                  // "BTC"
+            quote: 'USDT',                      // ✅ Quoted in USDT
+            displayName: coin.name + ' / USDT', // e.g., "Bitcoin / USDT"
             type: 'CRYPTO',
             lastPrice: coin.price_usd,
             change24h: coin.percent_change_24h,
