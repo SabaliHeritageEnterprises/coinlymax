@@ -166,15 +166,30 @@ function UsersTab({ users, onlineMap, canSuper }: { users: AppUser[]; onlineMap:
 
 // ─── User Edit Modal ────────────────────────────────────────────
 function UserEditModal({ user, canSuper, onClose }: { user: AppUser; canSuper: boolean; onClose: () => void }) {
-  const [form, setForm] = useState({ displayName: user.displayName ?? '', role: user.role, status: user.status, balance: Number(user.balance ?? 0) });
+  const [form, setForm] = useState({
+    displayName: user.displayName ?? '',
+    role: user.role,
+    status: user.status,
+    balance: Number(user.balance ?? 0),
+    customProfitPercentage: user.customProfitPercentage ?? undefined,
+  });
   const [msg, setMsg] = useState<string | null>(null);
   const save = async () => {
-    try { await adminUpdateUser(user.uid, form); setMsg('✓ Saved — pushed live to the user.'); }
-    catch (e: any) { setMsg(e?.message ?? 'Save failed (check permissions).'); }
+    try {
+      await adminUpdateUser(user.uid, form);
+      setMsg('✓ Saved — pushed live to the user.');
+    } catch (e: any) {
+      setMsg(e?.message ?? 'Save failed (check permissions).');
+    }
   };
   const fund = async (amt: number) => {
-    try { await adminAdjustBalance(user.uid, amt); setForm((f) => ({ ...f, balance: f.balance + amt })); setMsg(`✓ Credited ${fmtUsd(amt)} live.`); }
-    catch (e: any) { setMsg(e?.message ?? 'Update failed.'); }
+    try {
+      await adminAdjustBalance(user.uid, amt);
+      setForm((f) => ({ ...f, balance: f.balance + amt }));
+      setMsg(`✓ Credited ${fmtUsd(amt)} live.`);
+    } catch (e: any) {
+      setMsg(e?.message ?? 'Update failed.');
+    }
   };
   return (
     <div className="fixed inset-0 z-[100] bg-black/60 grid place-items-center p-4" onClick={onClose}>
@@ -184,19 +199,41 @@ function UserEditModal({ user, canSuper, onClose }: { user: AppUser; canSuper: b
           <button type="button" className="text-muted hover:text-white" onClick={onClose}>✕</button>
         </div>
         <div className="grid sm:grid-cols-2 gap-3">
-          <Labeled label="Display name"><input className="input" aria-label="Display name" value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} /></Labeled>
+          <Labeled label="Display name">
+            <input className="input" value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} />
+          </Labeled>
           <Labeled label="Status">
-            <select className="input" aria-label="Status" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as any })}>
-              <option value="active">active</option><option value="suspended">suspended</option>
+            <select className="input" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as any })}>
+              <option value="active">active</option>
+              <option value="suspended">suspended</option>
             </select>
           </Labeled>
           <Labeled label="Role">
-            <select className="input" aria-label="Role" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as any })}>
-              <option value="user">user</option><option value="admin">admin</option>
+            <select className="input" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as any })}>
+              <option value="user">user</option>
+              <option value="admin">admin</option>
               {canSuper && <option value="super_admin">super_admin</option>}
             </select>
           </Labeled>
-          <Labeled label="Balance (USD)"><input className="input" type="number" aria-label="Balance" value={form.balance} onChange={(e) => setForm({ ...form, balance: parseFloat(e.target.value) || 0 })} /></Labeled>
+          <Labeled label="Balance (USD)">
+            <input className="input" type="number" value={form.balance} onChange={(e) => setForm({ ...form, balance: parseFloat(e.target.value) || 0 })} />
+          </Labeled>
+          {/* ✅ NEW: Custom profit percentage */}
+          <Labeled label="Custom Profit % (optional)">
+            <input
+              className="input"
+              type="number"
+              min="0"
+              max="100"
+              step="0.1"
+              value={form.customProfitPercentage ?? ''}
+              onChange={(e) => setForm({
+                ...form,
+                customProfitPercentage: e.target.value ? parseFloat(e.target.value) : undefined
+              })}
+              placeholder="Uses global"
+            />
+          </Labeled>
         </div>
         <div className="flex gap-2 mt-3">
           <button type="button" className="btn-ghost text-sm" onClick={() => fund(1000)}>+ $1,000</button>
